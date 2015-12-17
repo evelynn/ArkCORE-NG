@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -1487,6 +1487,11 @@ bool WorldObject::IsWithinDist2d(const Position* pos, float dist) const
     return IsInDist2d(pos, dist + GetObjectSize());
 }
 
+bool WorldObject::IsWithinDist2d(const Position pos, float dist) const
+{
+    return IsInDist2d(&pos, dist + GetObjectSize());
+}
+
 bool WorldObject::IsWithinDist(WorldObject const* obj, float dist2compare, bool is3D /*= true*/) const
 {
     return obj && _IsWithinDist(obj, dist2compare, is3D);
@@ -2557,6 +2562,20 @@ std::list<Creature*> WorldObject::FindNearestCreatures(uint32 entry, float range
     std::list<Creature*> creatureList;    
     GetCreatureListWithEntryInGrid(creatureList, entry, range);   
     return creatureList;
+}
+
+std::vector<Creature*> WorldObject::FindNearestCreatures(uint32 entry, float range, bool alive) const
+{
+    std::list<Creature*> creatureList;
+    std::vector<Creature*> returnList;
+    GetCreatureListWithEntryInGrid(creatureList, entry, range);
+    
+    for (std::list<Creature*>::iterator itr = creatureList.begin(); itr != creatureList.end(); ++itr)
+    {
+        if ((*itr)->IsAlive() == alive)
+            returnList.push_back(*itr);
+    }
+    return returnList;
 }
 
 Creature* WorldObject::FindRandomCreatureInRange(uint32 entry, float range, bool alive)

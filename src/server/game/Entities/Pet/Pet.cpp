@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -975,6 +975,25 @@ bool Guardian::InitStatsForLevel(uint8 petlevel)
                     SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(petlevel / 2));
                     break;
                 }
+                case 27829: // Ebon Gargoyle
+                {
+                    if (!pInfo)
+                    {
+                        SetCreateMana(28 + 10 * petlevel);
+                        SetCreateHealth(28 + 30 * petlevel);
+                    }
+                    SetBonusDamage(int32(GetOwner()->GetTotalAttackPowerValue(BASE_ATTACK) * 0.5f));
+                    SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, float(petlevel - (petlevel / 4)));
+                    SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(petlevel + (petlevel / 4)));
+                    break;
+                }
+                case 28017: // Bloodworms
+                {
+                    SetCreateHealth(4 * petlevel);
+                    SetBonusDamage(int32(GetOwner()->GetTotalAttackPowerValue(BASE_ATTACK) * 0.006f));
+                    SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, float(petlevel - 30 - (petlevel / 4)));
+                    SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(petlevel - 30 + (petlevel / 4)));
+                }
                 case 29264: // Feral Spirit
                 {
                     if (!pInfo)
@@ -1003,24 +1022,26 @@ bool Guardian::InitStatsForLevel(uint8 petlevel)
                     }
                     break;
                 }
-                case 27829: // Ebon Gargoyle
+                case 57220: // Tentacle of the Old Ones
+                case 58077: // Tentacle of the Old Ones
                 {
-                    if (!pInfo)
-                    {
-                        SetCreateMana(28 + 10*petlevel);
-                        SetCreateHealth(28 + 30*petlevel);
-                    }
-                    SetBonusDamage(int32(GetOwner()->GetTotalAttackPowerValue(BASE_ATTACK) * 0.5f));
-                    SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, float(petlevel - (petlevel / 4)));
-                    SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(petlevel + (petlevel / 4)));
+                    SetCreateHealth(m_owner->GetMaxHealth() / 3.5);
+                    float mindamage, maxdamage;
+                    m_owner->ToPlayer()->CalculateMinMaxDamage(BASE_ATTACK, false, false, mindamage, maxdamage);
+                    SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, GetWeaponDamageRange(BASE_ATTACK, MINDAMAGE) + 
+                        (m_owner->GetTotalAttackPowerValue(BASE_ATTACK) / 1.5));
+                    SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, GetWeaponDamageRange(BASE_ATTACK, MAXDAMAGE) +
+                        (m_owner->GetTotalAttackPowerValue(BASE_ATTACK) / 1.5));
                     break;
                 }
-                case 28017: // Bloodworms
+                case 58078: // Tentacle of the Old Ones
                 {
-                    SetCreateHealth(4 * petlevel);
-                    SetBonusDamage(int32(GetOwner()->GetTotalAttackPowerValue(BASE_ATTACK) * 0.006f));
-                    SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, float(petlevel - 30 - (petlevel / 4)));
-                    SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, float(petlevel - 30 + (petlevel / 4)));
+                    SetCreateHealth(m_owner->GetMaxHealth() / 2.8);
+                    float mindamage, maxdamage;
+                    m_owner->ToPlayer()->CalculateMinMaxDamage(BASE_ATTACK, false, false, mindamage, maxdamage);
+                    SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, GetWeaponDamageRange(BASE_ATTACK, MINDAMAGE) + (m_owner->GetTotalAttackPowerValue(BASE_ATTACK)));
+                    SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, GetWeaponDamageRange(BASE_ATTACK, MAXDAMAGE) + (m_owner->GetTotalAttackPowerValue(BASE_ATTACK)));
+                    break;
                 }
             }
             break;
@@ -1321,6 +1342,11 @@ void Pet::_SaveAuras(SQLTransaction& trans)
 
         // don't save guid of caster in case we are caster of the spell - guid for pet is generated every pet load, so it won't match saved guid anyways
         uint64 casterGUID = (itr->second->GetCasterGUID() == GetGUID()) ? 0 : itr->second->GetCasterGUID();
+
+        // user reports some sql errors with duplicate entry, so we use delete before insert
+        stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_PET_AURAS);
+        stmt->setUInt32(0, m_charmInfo->GetPetNumber());
+        trans->Append(stmt);
 
         uint8 index = 0;
 

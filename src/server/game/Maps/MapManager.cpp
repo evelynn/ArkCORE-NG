@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -53,8 +53,8 @@ void MapManager::Initialize()
 
     int num_threads(sWorld->getIntConfig(CONFIG_NUMTHREADS));
     // Start mtmaps if needed.
-    if (num_threads > 0 && m_updater.activate(num_threads) == -1)
-        abort();
+    if (num_threads > 0)
+        m_updater.activate(num_threads);
 }
 
 void MapManager::InitializeVisibilityDistanceInfo()
@@ -205,17 +205,10 @@ bool MapManager::CanPlayerEnter(uint32 mapid, Player* player, bool loginCheck)
         if (boundInstance && boundInstance->save)
             if (Map* boundMap = sMapMgr->FindMap(mapid, boundInstance->save->GetInstanceId()))
                 if (!loginCheck && !boundMap->CanEnter(player))
-                    return false;
-            /*
-                This check has to be moved to InstanceMap::CanEnter()
-                // Player permanently bounded to different instance than groups one
-                InstancePlayerBind* playerBoundedInstance = player->GetBoundInstance(mapid, player->GetDifficulty(entry->IsRaid()));
-                if (playerBoundedInstance && playerBoundedInstance->perm && playerBoundedInstance->save &&
-                    boundedInstance->save->GetInstanceId() != playerBoundedInstance->save->GetInstanceId())
                 {
-                    /// @todo send some kind of error message to the player
+                    TC_LOG_ERROR("maps", "ASSERT Check Map::CanPlayerEnter:: Group: %u Instance: %u", group->GetLowGUID(), boundMap->GetEntry());
                     return false;
-                }*/
+                }
     }
 
     // players are only allowed to enter 5 instances per hour

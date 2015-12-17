@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2011 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -200,18 +200,22 @@ MoveSpline::MoveSpline() : m_Id(0), time_passed(0),
 
 bool MoveSplineInitArgs::Validate(Unit* unit) const
 {
-#define CHECK(exp) \
-    if (!(exp))\
-    {\
-        TC_LOG_ERROR("misc", "MoveSplineInitArgs::Validate: expression '%s' failed for GUID: %u Entry: %u", #exp, unit->GetTypeId() == TYPEID_PLAYER ? unit->GetGUIDLow() : unit->ToCreature()->GetDBTableGUIDLow(), unit->GetEntry());\
-        return false;\
+    if (path.size() <= 1)
+    {
+        TC_LOG_ERROR("misc", "MoveSplineInitArgs::Validate size <= 1.0f : expression failed for GUID: %u Entry: %u", unit->GetTypeId() == TYPEID_PLAYER ? unit->GetGUIDLow() : unit->ToCreature()->GetDBTableGUIDLow(), unit->GetEntry());
+        return false;
     }
-    CHECK(path.size() > 1);
-    CHECK(velocity > 0.1f);
-    CHECK(time_perc >= 0.f && time_perc <= 1.f);
-    //CHECK(_checkPathBounds());
+    if (velocity < 0.1f)
+    {
+        TC_LOG_ERROR("misc", "MoveSplineInitArgs::Validate velocity < 0.1: expression failed for GUID: %u Entry: %u", unit->GetTypeId() == TYPEID_PLAYER ? unit->GetGUIDLow() : unit->ToCreature()->GetDBTableGUIDLow(), unit->GetEntry());
+        return false;
+    }
+    if (time_perc < 0.f || time_perc > 1.f)
+    {
+        TC_LOG_ERROR("misc", "MoveSplineInitArgs::Validate time_perc between 0 and 1: expression failed for GUID: %u Entry: %u", unit->GetTypeId() == TYPEID_PLAYER ? unit->GetGUIDLow() : unit->ToCreature()->GetDBTableGUIDLow(), unit->GetEntry());
+        return false;
+    }
     return true;
-#undef CHECK
 }
 
 // MONSTER_MOVE packet format limitation for not CatmullRom movement:

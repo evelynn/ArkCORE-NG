@@ -17,12 +17,13 @@ set(scripts_STAT_SRCS
   EasternKingdoms/AlteracValley/boss_drekthar.cpp
   EasternKingdoms/AlteracValley/boss_vanndar.cpp
   EasternKingdoms/AlteracValley/alterac_valley.cpp
+  EasternKingdoms/BaradinHold/baradin_hold.h
+  EasternKingdoms/BaradinHold/bh_trash.cpp
   EasternKingdoms/BaradinHold/boss_alizabal.cpp
+  EasternKingdoms/BaradinHold/boss_argaloth.cpp
   EasternKingdoms/BaradinHold/boss_occuthar.cpp
   EasternKingdoms/BaradinHold/boss_pit_lord_argaloth.cpp
   EasternKingdoms/BaradinHold/instance_baradin_hold.cpp
-  EasternKingdoms/BaradinHold/boss_argaloth.cpp
-  EasternKingdoms/BaradinHold/bh_trash.cpp
   EasternKingdoms/BastionOfTwilight/bastion_of_twilight.h
   EasternKingdoms/BastionOfTwilight/bastion_of_twilight.cpp
   EasternKingdoms/BastionOfTwilight/instance_bastion_of_twilight.cpp
@@ -165,10 +166,16 @@ set(scripts_STAT_SRCS
   EasternKingdoms/MagistersTerrace/boss_vexallus.cpp
   EasternKingdoms/MagistersTerrace/magisters_terrace.cpp
   EasternKingdoms/Uldaman/uldaman.cpp
-  EasternKingdoms/Uldaman/boss_ironaya.cpp
   EasternKingdoms/Uldaman/uldaman.h
   EasternKingdoms/Uldaman/instance_uldaman.cpp
   EasternKingdoms/Uldaman/boss_archaedas.cpp
+  EasternKingdoms/Uldaman/boss_ironaya.cpp
+  EasternKingdoms/Uldaman/boss_ancient_stone_keeper.cpp
+  EasternKingdoms/Uldaman/boss_galgann_firehammer.cpp
+  EasternKingdoms/Uldaman/boss_grimlok.cpp
+  EasternKingdoms/Uldaman/boss_obsidian_sentinel.cpp
+  EasternKingdoms/Uldaman/boss_revelosh.cpp
+  EasternKingdoms/Uldaman/boss_the_lost_dwarves.cpp
   EasternKingdoms/zone_swamp_of_sorrows.cpp
   EasternKingdoms/SunwellPlateau/boss_eredar_twins.cpp
   EasternKingdoms/SunwellPlateau/boss_kiljaeden.cpp
@@ -182,7 +189,13 @@ set(scripts_STAT_SRCS
   EasternKingdoms/zone_stranglethorn_vale.cpp
   EasternKingdoms/Deadmines/deadmines.h
   EasternKingdoms/Deadmines/deadmines.cpp
+  EasternKingdoms/Deadmines/boss_admiral_ripsnarl.cpp
+  EasternKingdoms/Deadmines/boss_captain_cookie.cpp
+  EasternKingdoms/Deadmines/boss_foo_reaper_5000.cpp
+  EasternKingdoms/Deadmines/boss_glubtok.cpp
+  EasternKingdoms/Deadmines/boss_helix_gearbreaker.cpp
   EasternKingdoms/Deadmines/boss_mr_smite.cpp
+  EasternKingdoms/Deadmines/boss_vanessa_van_cleef.cpp
   EasternKingdoms/Deadmines/instance_deadmines.cpp
   EasternKingdoms/zone_duskwood.cpp
   EasternKingdoms/ScarletMonastery/boss_azshir_the_sleepless.cpp
@@ -239,8 +252,10 @@ set(scripts_STAT_SRCS
   EasternKingdoms/Karazhan/boss_terestian_illhoof.cpp
   EasternKingdoms/Karazhan/karazhan.h
   EasternKingdoms/TheStockade/instance_the_stockade.cpp
-  EasternKingdoms/Gilneas/gilneas.h
-  EasternKingdoms/Gilneas/gilneas.cpp
+  EasternKingdoms/Gilneas/zone_gilneas.h
+  EasternKingdoms/Gilneas/zone_gilneas.cpp
+  EasternKingdoms/Gilneas/zone_gilneas2.cpp
+  EasternKingdoms/Gilneas/zone_duskhaven.cpp
   EasternKingdoms/ThroneOfTheTides/boss_lady_nazjar.cpp
   EasternKingdoms/ThroneOfTheTides/boss_commander_ulthok.cpp
   EasternKingdoms/ThroneOfTheTides/boss_mindebender_ghursha.cpp
@@ -259,8 +274,6 @@ set(scripts_STAT_SRCS
   EasternKingdoms/zone_elwynn_forest.cpp  
   EasternKingdoms/zone_coldridge_valley.cpp
   EasternKingdoms/zone_dun_morogh.cpp
-  EasternKingdoms/zone_gilneas.cpp
-  EasternKingdoms/zone_duskhaven.cpp
 )
 
 message("  -> Prepared: Eastern Kingdoms")

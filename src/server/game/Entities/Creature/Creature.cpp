@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -1625,10 +1625,14 @@ void Creature::ForcedDespawn(uint32 timeMSToDespawn)
 
 void Creature::DespawnOrUnsummon(uint32 msTimeToDespawn /*= 0*/)
 {
-    if (TempSummon* summon = this->ToTempSummon())
-        summon->UnSummon(msTimeToDespawn);
-    else
-        ForcedDespawn(msTimeToDespawn);
+    if (this->IsAlive())
+        if (TempSummon* summon = this->ToTempSummon())
+        {
+            summon->UnSummon(msTimeToDespawn);
+            return;
+        }
+
+    ForcedDespawn(msTimeToDespawn);
 }
 
 bool Creature::IsImmunedToSpell(SpellInfo const* spellInfo) const
@@ -2561,11 +2565,18 @@ void Creature::UpdateMovementFlags()
         return;
 
     // Set the movement flags if the creature is in that mode. (Only fly if actually in air, only swim if in water, etc)
-    float ground = GetMap()->GetHeight(GetPositionX(), GetPositionY(), GetPositionZMinusOffset());
+    float ground = GetMap()->GetHeight(GetPhaseMask(), GetPositionX(), GetPositionY(), GetPositionZMinusOffset());
 
     bool isInAir = (G3D::fuzzyGt(GetPositionZMinusOffset(), ground + 0.05f) || G3D::fuzzyLt(GetPositionZMinusOffset(), ground - 0.05f)); // Can be underground too, prevent the falling
+    bool allowedToFly = GetUnitMovementFlags() & MOVEMENTFLAG_CAN_FLY && GetByteValue(UNIT_FIELD_BYTES_1, 3) & UNIT_BYTE1_FLAG_HOVER && isInAir;
+    bool allowedToWalk = GetUnitMovementFlags() & MOVEMENTFLAG_WALKING && !(GetByteValue(UNIT_FIELD_BYTES_1, 3) & UNIT_BYTE1_FLAG_HOVER) && !isInAir;
 
-    if (GetCreatureTemplate()->InhabitType & INHABIT_AIR && isInAir && !IsFalling())
+    if ((allowedToFly || allowedToWalk) && !IsInWater() && !IsFalling())
+    {
+        // if movement allow what we do, we not change the value back.
+        // so we allow every single mob of a entry, to have flying/walking flag or not..
+    }
+    else if (GetCreatureTemplate()->InhabitType & INHABIT_AIR && isInAir && !IsFalling())
     {
         if (GetCreatureTemplate()->InhabitType & INHABIT_GROUND)
             SetCanFly(true);
@@ -2850,3 +2861,29 @@ void Creature::ReleaseFocus(Spell const* focusSpell)
         ClearUnitState(UNIT_STATE_ROTATING);
 }
 
+void Creature::SetTextRepeatId(uint8 textGroup, uint8 id)
+{
+    CreatureTextRepeatIds& repeats = m_textRepeat[textGroup];
+    if (std::find(repeats.begin(), repeats.end(), id) == repeats.end())
+        repeats.push_back(id);
+    else
+        TC_LOG_ERROR("sql.sql", "CreatureTextMgr: TextGroup %u for Creature(%s) GuidLow %u Entry %u, id %u already added", uint32(textGroup), GetName().c_str(), GetGUIDLow(), GetEntry(), uint32(id));
+}
+
+CreatureTextRepeatIds Creature::GetTextRepeatGroup(uint8 textGroup)
+{
+    CreatureTextRepeatIds ids;
+
+    CreatureTextRepeatGroup::const_iterator groupItr = m_textRepeat.find(textGroup);
+    if (groupItr != m_textRepeat.end())
+        ids = groupItr->second;
+
+    return ids;
+}
+
+void Creature::ClearTextRepeatGroup(uint8 textGroup)
+{
+    CreatureTextRepeatGroup::iterator groupItr = m_textRepeat.find(textGroup);
+    if (groupItr != m_textRepeat.end())
+        groupItr->second.clear();
+}

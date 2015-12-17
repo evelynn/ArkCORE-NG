@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2011-2012 Project SkyFire <http://www.projectskyfire.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -24,11 +24,6 @@ class boss_ascendant_lord_obsidius : public CreatureScript
 public:
     boss_ascendant_lord_obsidius() : CreatureScript("boss_ascendant_lord_obsidius") { }
 
-    CreatureAI* GetAI(Creature* creature) const
-    {
-        return new boss_ascendant_lord_obsidiusAI (creature);
-    }
-
     struct boss_ascendant_lord_obsidiusAI : public ScriptedAI
     {
         boss_ascendant_lord_obsidiusAI(Creature* creature) : ScriptedAI(creature)
@@ -50,6 +45,11 @@ public:
             DoMeleeAttackIfReady();
         }
     };
+
+    CreatureAI* GetAI(Creature* creature) const
+    {
+        return new boss_ascendant_lord_obsidiusAI(creature);
+    }
 };
 
 void AddSC_boss_ascendant_lord_obsidius()

@@ -31,17 +31,28 @@ public:
 
     struct npc_trainings_dummyAI : public ScriptedAI
     {
-        npc_trainings_dummyAI(Creature *c) : ScriptedAI(c) { }
+        npc_trainings_dummyAI(Creature *c) : ScriptedAI(c) 
+        { 
+            SetCombatMovement(false);
+        }
 	
 		bool	_spell_is_on_work;
 		uint32	_timer;
 
-		void Reset()  
+		void Reset() override
 		{ 			
-			_spell_is_on_work=false; _timer=0;
+			_spell_is_on_work=false; 
+            _timer=0;
+            me->SetReactState(REACT_PASSIVE);
+            me->SetControlled(true, UNIT_STATE_STUNNED);
 		}
 
-		void SpellHit(Unit * Hitter, SpellInfo const* spell) 
+        void DamageTaken(Unit* /*attacker*/, uint32& damage) override
+        { 
+            damage = 0;
+        }
+
+        void SpellHit(Unit * Hitter, SpellInfo const* spell) override
         {		
 			// printf("Trigger Spell: %d \n",spell->Id);
 			if (Player* player = Hitter->ToPlayer())
@@ -129,16 +140,16 @@ public:
 			}
         }
 
-		 void UpdateAI(uint32 diff) 
-         {
-			if (_spell_is_on_work)
-			{
-				if (_timer <= diff)	
-					_spell_is_on_work=false;
-				else 
-					_timer -= diff;	
-			}
-		 }
+        void UpdateAI(uint32 diff) override
+        {
+            if (_spell_is_on_work)
+            {
+                if (_timer <= diff)
+                    _spell_is_on_work = false;
+                else
+                    _timer -= diff;
+            }
+        }
     };
 
 
@@ -147,8 +158,6 @@ public:
         return new npc_trainings_dummyAI (creature);
     }
 };
-
-
  
  void AddSC_npc_trainings_dummy()
 {

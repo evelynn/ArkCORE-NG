@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -511,6 +511,16 @@ void SpellScript::SetHitDamage(int32 damage)
     m_spell->m_damage = damage;
 }
 
+void SpellScript::SetBasepoints(int32 basepoints)
+{
+    if (!IsInEffectHook())
+    {
+        TC_LOG_ERROR("scripts", "Script: `%s` Spell: `%u`: function SpellScript::SetBasepoints was called, but function has no effect in current hook!", m_scriptName->c_str(), m_scriptSpellId);
+        return;
+    }
+
+    m_spell->damage = basepoints;
+}
 int32 SpellScript::GetHitHeal()
 {
     if (!IsInTargetHook())

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -114,15 +114,18 @@ enum WorldDatabaseStatements
     WORLD_DEL_DISABLES,
     WORLD_SEL_REQ_XP,
     WORLD_SEL_GRAVEYARDS,
-    WORLD_SEL_DIGSITE_INFO,
-    WORLD_SEL_DIGSITE_POS,
-    WORLD_SEL_RANDOM_DIGSITE,
     WORLD_SEL_GUILD_CHALLENGES,
     WORLD_SEL_GUILD_CHALLENGES_REWARDS,
 
     // npc_bot
     WORLD_SEL_NPCBOT_TEMPLATE,
     WORLD_SEL_NPCBOT_PET_LEVELSTATS,
+
+    // Archaeology
+    WORLD_SEL_POSITION_ENTRY,
+    WORLD_SEL_POSITION_ID,
+    WORLD_SEL_DIGSITE_ENTRY,
+    WORLD_SEL_DIGSITE_ENTRY_MAP,
 
     MAX_WORLDDATABASE_STATEMENTS
 };

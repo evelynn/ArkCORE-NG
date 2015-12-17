@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -963,7 +963,6 @@ class ObjectMgr
         void LoadBroadcastTextLocales();
         bool LoadTrinityStrings(char const* table, int32 min_value, int32 max_value);
         bool LoadTrinityStrings() { return LoadTrinityStrings("arkcore_string", MIN_ARKCORE_STRING_ID, MAX_ARKCORE_STRING_ID); }
-        void LoadDbScriptStrings();
         void LoadCreatureClassLevelStats();
         void LoadCreatureLocales();
         void LoadGraveyardOrientations();
@@ -1034,9 +1033,11 @@ class ObjectMgr
 
         void LoadPhaseDefinitions();
         void LoadSpellPhaseInfo();
+        void LoadPhaseArea();
 
         PhaseDefinitionStore const* GetPhaseDefinitionStore() { return &_PhaseDefinitionStore; }
         SpellPhaseStore const* GetSpellPhaseStore() { return &_SpellPhaseStore; }
+        PhaseAreaStore const* GetPhaseAreaStore() { return &_PhaseAreaStore; }
 
         std::string GeneratePetName(uint32 entry);
         uint32 GetBaseXP(uint8 level);
@@ -1405,6 +1406,7 @@ class ObjectMgr
 
         PhaseDefinitionStore _PhaseDefinitionStore;
         SpellPhaseStore _SpellPhaseStore;
+        PhaseAreaStore _PhaseAreaStore;
 
     private:
         void LoadScripts(ScriptsType type);

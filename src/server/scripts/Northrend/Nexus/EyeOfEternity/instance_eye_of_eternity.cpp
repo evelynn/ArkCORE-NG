@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -27,7 +27,7 @@ class instance_eye_of_eternity : public InstanceMapScript
 public:
     instance_eye_of_eternity() : InstanceMapScript("instance_eye_of_eternity", 616) { }
 
-    InstanceScript* GetInstanceScript(InstanceMap* map) const OVERRIDE
+    InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
         return new instance_eye_of_eternity_InstanceMapScript(map);
     }
@@ -49,7 +49,7 @@ public:
             alexstraszaBunnyGUID = 0;
         };
 
-        bool SetBossState(uint32 type, EncounterState state) OVERRIDE
+        bool SetBossState(uint32 type, EncounterState state) override
         {
             if (!InstanceScript::SetBossState(type, state))
                 return false;
@@ -81,7 +81,7 @@ public:
 
         /// @todo this should be handled in map, maybe add a summon function in map
         // There is no other way afaik...
-        void SpawnGameObject(uint32 entry, Position& pos)
+        void SpawnGameObject(uint32 entry, Position const& pos)
         {
             GameObject* go = new GameObject;
             if (!go->Create(sObjectMgr->GenerateLowGuid(HIGHGUID_GAMEOBJECT), entry, instance,
@@ -95,43 +95,32 @@ public:
             instance->AddToMap(go);
         }
 
-        void OnGameObjectCreate(GameObject* go) OVERRIDE
+        void OnGameObjectCreate(GameObject* go) override
         {
             switch (go->GetEntry())
             {
                 case GO_NEXUS_RAID_PLATFORM:
                     platformGUID = go->GetGUID();
                     break;
-                case GO_FOCUSING_IRIS_10:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_10MAN_NORMAL)
-                    {
-                        irisGUID = go->GetGUID();
-                        focusingIrisPosition = go->GetPosition();
-                    }
-                    break;
+                case GO_FOCUSING_IRIS_10:                   
                 case GO_FOCUSING_IRIS_25:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL)
-                    {
-                        irisGUID = go->GetGUID();
-                        focusingIrisPosition = go->GetPosition();
-                    }
+                    irisGUID = go->GetGUID();
+                    focusingIrisPosition = go->GetPosition();
                     break;
                 case GO_EXIT_PORTAL:
                     exitPortalGUID = go->GetGUID();
                     exitPortalPosition = go->GetPosition();
                     break;
-                case GO_HEART_OF_MAGIC_10:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_10MAN_NORMAL)
-                        heartOfMagicGUID = go->GetGUID();
-                    break;
+                case GO_HEART_OF_MAGIC_10:                    
                 case GO_HEART_OF_MAGIC_25:
-                    if (instance->GetDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL)
-                        heartOfMagicGUID = go->GetGUID();
+                    heartOfMagicGUID = go->GetGUID();
+                    break;
+                default:
                     break;
             }
         }
 
-        void OnCreatureCreate(Creature* creature) OVERRIDE
+        void OnCreatureCreate(Creature* creature) override
         {
             switch (creature->GetEntry())
             {
@@ -153,7 +142,7 @@ public:
             }
         }
 
-        void OnUnitDeath(Unit* unit) OVERRIDE
+        void OnUnitDeath(Unit* unit) override
         {
             if (unit->GetTypeId() != TYPEID_PLAYER)
                 return;
@@ -166,15 +155,15 @@ public:
             unit->SetControlled(true, UNIT_STATE_ROOT);
         }
 
-        void ProcessEvent(WorldObject* /*obj*/, uint32 eventId) OVERRIDE
+        void ProcessEvent(WorldObject* /*obj*/, uint32 eventId) override
         {
             if (eventId == EVENT_FOCUSING_IRIS)
             {
                 if (Creature* alexstraszaBunny = instance->GetCreature(alexstraszaBunnyGUID))
-                {
                     alexstraszaBunny->CastSpell(alexstraszaBunny, SPELL_IRIS_OPENED);
-                    instance->GetGameObject(irisGUID)->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_IN_USE);
-                }
+                
+                if (GameObject* iris = instance->GetGameObject(irisGUID))
+                    iris->SetFlag(GAMEOBJECT_FLAGS, GO_FLAG_IN_USE);
 
                 if (Creature* malygos = instance->GetCreature(malygosGUID))
                     malygos->AI()->DoAction(0); // ACTION_LAND_ENCOUNTER_START
@@ -240,7 +229,7 @@ public:
             }
         }
 
-        void SetData(uint32 data, uint32 /*value*/) OVERRIDE
+        void SetData(uint32 data, uint32 /*value*/) override
         {
             switch (data)
             {
@@ -256,7 +245,7 @@ public:
             }
         }
 
-        uint64 GetData64(uint32 data) const OVERRIDE
+        uint64 GetData64(uint32 data) const override
         {
             switch (data)
             {
@@ -279,7 +268,7 @@ public:
             return 0;
         }
 
-        std::string GetSaveData() OVERRIDE
+        std::string GetSaveData() override
         {
             OUT_SAVE_INST_DATA;
 
@@ -290,7 +279,7 @@ public:
             return saveStream.str();
         }
 
-        void Load(const char* str) OVERRIDE
+        void Load(const char* str) override
         {
             if (!str)
             {

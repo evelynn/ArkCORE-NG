@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -274,7 +274,7 @@ class WorldSession
         void SendPetNameInvalid(uint32 error, std::string const& name, DeclinedName *declinedName);
         void SendPartyResult(PartyOperation operation, std::string const& member, PartyResult res, uint32 val = 0);
         void SendAreaTriggerMessage(const char* Text, ...) ATTR_PRINTF(2, 3);
-        void SendSetPhaseShift(std::set<uint32> const& phaseIds, std::set<uint32> const& terrainswaps);
+        void SendSetPhaseShift(std::set<uint32> const& phaseIds, std::set<uint32> const& terrainswaps, std::set<uint32> const& worldMapAreaSwaps);
         void SendQueryTimeResponse();
         void SendServerWorldInfo();
 
@@ -760,7 +760,7 @@ class WorldSession
         void HandleTalentWipeConfirmOpcode(WorldPacket& recvPacket);
         void HandleSetPrimaryTree(WorldPacket& recvPacket);
         void HandleUnlearnSkillOpcode(WorldPacket& recvPacket);
-        void HandleArcheologyRequestHistory(WorldPacket& recvPacket);
+        void HandleArchaeologyRequestHistory(WorldPacket& recvPacket);
 
         void HandleQuestgiverStatusQueryOpcode(WorldPacket& recvPacket);
         void HandleQuestgiverStatusMultipleQuery(WorldPacket& recvPacket);

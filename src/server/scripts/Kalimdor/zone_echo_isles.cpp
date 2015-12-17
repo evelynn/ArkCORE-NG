@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -45,34 +45,34 @@ public:
 
         void Reset()
         {
-            _timer = urand(1800,2200);
+            _timer = urand(1800, 2200);
         }
 
         void UpdateAI(uint32 diff)
         {
             if (!UpdateVictim())
             {
-                if (Creature* tiki = me->FindNearestCreature (NPC_TIKI_TARGET, 3.0f))
+                if (Creature* tiki = me->FindNearestCreature(NPC_TIKI_TARGET, 3.0f))
                 {
                     if (_timer <= diff)
                     {
-                        me->SetFacingTo (me->GetAngle(tiki));
+                        me->SetFacingTo(me->GetAngle(tiki));
                         me->HandleEmoteCommand(EMOTE_ONESHOT_ATTACK1H);
-                        _timer = urand(1800,2200);
+                        _timer = urand(1800, 2200);
                     }
-                    else 
+                    else
                         _timer -= diff;
                 }
             }
-            else 
+            else
                 DoMeleeAttackIfReady();
-            
+
         }
     };
 
-       CreatureAI* GetAI(Creature* creature) const
+    CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_novice_darkspear_warriorAI (creature);
+        return new npc_novice_darkspear_warriorAI(creature);
     }
 };
 
@@ -80,13 +80,13 @@ public:
 
 enum eQuestChainStart
 {
-    NPC_DOCILE_ISLAND_BOAR = 38141,
-    NPC_WILDMANE_CAT = 38046,
-    SPELL_LEAPING_RUSH = 75002,
-    SPELL_WILD_POUNCE = 71232,
+    NPC_DOCILE_ISLAND_BOAR      = 38141,
+    NPC_WILDMANE_CAT            = 38046,
+    SPELL_LEAPING_RUSH          = 75002,
+    SPELL_WILD_POUNCE           = 71232,
     SPELL_PERMANENT_FEIGN_DEATH = 29266,
-    SPELL_FEIGN_DEATH = 71598,
-    SPELL_SWIPE = 31279,
+    SPELL_FEIGN_DEATH           = 71598,
+    SPELL_SWIPE                 = 31279,
 };
 
 class npc_docile_island_boar : public CreatureScript
@@ -94,14 +94,14 @@ class npc_docile_island_boar : public CreatureScript
 public:
     npc_docile_island_boar() : CreatureScript("npc_docile_island_boar") { }
 
-    bool OnDummyEffect(Unit* caster, uint32 spellId, SpellEffIndex effIndex, Creature* target) 
-    { 
+    bool OnDummyEffect(Unit* caster, uint32 spellId, SpellEffIndex effIndex, Creature* target)
+    {
         if (spellId == SPELL_WILD_POUNCE && effIndex == 1)
         {
             CAST_AI(npc_docile_island_boarAI, target->AI())->StartAnim(caster->GetGUID());
             return true;
         }
-        return false; 
+        return false;
     }
 
 
@@ -124,11 +124,11 @@ public:
         }
 
         void DamageTaken(Unit* attacker, uint32& damage) override
-        { 
+        {
         }
 
         void SpellHit(Unit* caster, SpellInfo const* spell) override
-        { 
+        {
             if (spell->Id == SPELL_LEAPING_RUSH)
             {
                 caster->GetMotionMaster()->MoveIdle();
@@ -156,37 +156,37 @@ public:
         {
             switch (m_phase)
             {
-                case 0:
-                    break;
-                case 1:
-                {
-                    // me->RemoveAura(SPELL_FEIGN_DEATH);
-                }
-                case 2:
-                {
-                    UpdateVictim();
-                    m_phase = 0; m_timer = 0;
-                    break;
-                }
-                // here start phase for spell 71232, bunch boar down
-                case 5:
-                    me->GetMotionMaster()->MoveIdle();
-                    me->HandleEmoteState(EMOTE_STATE_SLEEP);
-                    m_phase = 6; m_timer = 10000;
-                    break;
-                case 6:
-                    UpdateVictim();
-                    m_phase = 0; m_timer = 0;
-                    break;
-                default:
-                    break;
+            case 0:
+                break;
+            case 1:
+            {
+                // me->RemoveAura(SPELL_FEIGN_DEATH);
+            }
+            case 2:
+            {
+                UpdateVictim();
+                m_phase = 0; m_timer = 0;
+                break;
+            }
+            // here start phase for spell 71232, bunch boar down
+            case 5:
+                me->GetMotionMaster()->MoveIdle();
+                me->HandleEmoteState(EMOTE_STATE_SLEEP);
+                m_phase = 6; m_timer = 10000;
+                break;
+            case 6:
+                UpdateVictim();
+                m_phase = 0; m_timer = 0;
+                break;
+            default:
+                break;
             }
         }
     };
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_docile_island_boarAI (creature);
+        return new npc_docile_island_boarAI(creature);
     }
 };
 
@@ -235,12 +235,12 @@ public:
                     if (!boar->HasAura(SPELL_PERMANENT_FEIGN_DEATH))
                     {
                         uint8 rn = urand(0, 100);
-                        if (me->IsWithinDist2d(&boar->GetPosition(), 40.0f) && !me->IsWithinDist2d(&boar->GetPosition(), 8.0f) && (rn < 50))
+                        if (me->IsWithinDist2d(boar->GetPosition(), 40.0f) && !me->IsWithinDist2d(boar->GetPosition(), 8.0f) && (rn < 50))
                         {
                             me->CastSpell(boar, SPELL_WILD_POUNCE, true); // Pinning a boar to the ground.
                             m_phase = 1; m_timer = 5000;
                         }
-                        else if (!me->IsWithinDist2d(&boar->GetPosition(), 5.0f) && (rn >= 50))
+                        else if (!me->IsWithinDist2d(boar->GetPosition(), 5.0f) && (rn >= 50))
                         {
                             me->CastSpell(boar, SPELL_LEAPING_RUSH, true); // inflicting 100% weapon damage.
                             m_phase = 1; m_timer = 5000;
@@ -264,7 +264,7 @@ public:
 
     CreatureAI* GetAI(Creature* creature) const
     {
-        return new npc_wildmane_catAI (creature);
+        return new npc_wildmane_catAI(creature);
     }
 };
 
@@ -273,10 +273,10 @@ public:
 enum TrollSpells
 {
     // Tiki Target
-    SPELL_TIKI_TARGET_VISUAL_1 = 71064,
-    SPELL_TIKI_TARGET_VISUAL_2 = 71065,
-    SPELL_TIKI_TARGET_VISUAL_3 = 71066,
-    SPELL_TIKI_TARGET_VISUAL_DIE = 71240,
+    SPELL_TIKI_TARGET_VISUAL_1      = 71064,
+    SPELL_TIKI_TARGET_VISUAL_2      = 71065,
+    SPELL_TIKI_TARGET_VISUAL_3      = 71066,
+    SPELL_TIKI_TARGET_VISUAL_DIE    = 71240,
 };
 
 class npc_tiki_target : public CreatureScript
@@ -318,10 +318,10 @@ public:
 
 enum TrollCreatures
 {
-    NPC_SPITESCALE_SCOUT = 38142,
-    NPC_DARKSPEAR_JAILOR = 39062,
+    NPC_SPITESCALE_SCOUT        = 38142,
+    NPC_DARKSPEAR_JAILOR        = 39062,
     NPC_CAPTIVE_SPIESCALE_SCOUT = 38142,
-    NPC_LEGATI_ROGUE_TRAINER = 38244,
+    NPC_LEGATI_ROGUE_TRAINER    = 38244,
 };
 
 Position const TrollwayPos[8] =
@@ -345,8 +345,8 @@ public:
 
     enum Events
     {
-        EVENT_GO_TO_CENTER = 1,
-        EVENT_WAIT_ON_FIGHT = 2,
+        EVENT_GO_TO_CENTER      = 1,
+        EVENT_WAIT_ON_FIGHT     = 2,
         EVENT_FIGHT_UNTIL_DEATH = 3,
     };
 
@@ -398,7 +398,7 @@ public:
                     {
                         Talk(0, player);
                         me->setFaction(2224);
-                        me->Attack(player , true);
+                        me->Attack(player, true);
                         player->Attack(me, true);
                         events.ScheduleEvent(EVENT_WAIT_ON_FIGHT, 8000);
                         return;
@@ -585,9 +585,9 @@ public:
 
     enum eQuest
     {
-        NPC_WOUNDET_DARKSPEAR_WATCHER = 47057,
-        QUEST_THE_ART_OF_A_PRIEST = 24784,
-        SPELL_FLASH_HEAL = 2061,
+        NPC_WOUNDET_DARKSPEAR_WATCHER   = 47057,
+        QUEST_THE_ART_OF_A_PRIEST       = 24784,
+        SPELL_FLASH_HEAL                = 2061,
     };
 
     struct npc_wounded_darkspear_watcherAI : public ScriptedAI
@@ -595,7 +595,7 @@ public:
         npc_wounded_darkspear_watcherAI(Creature* creature) : ScriptedAI(creature) { }
 
         void SpellHit(Unit* caster, SpellInfo const* spell) override
-        { 
+        {
             if (Player* player = caster->ToPlayer())
                 if (player->GetQuestStatus(QUEST_THE_ART_OF_A_PRIEST) == QUEST_STATUS_INCOMPLETE)
                     if (spell->Id == SPELL_FLASH_HEAL)
@@ -621,9 +621,9 @@ public:
 
     enum eHatchling
     {
-        NPC_BLOODTALON_HATCHLING = 39157,
-        QUEST_SAVING_THE_YOUNG = 24623,
-        SPELL_BLOODTALON_WHISTLE = 70874,
+        NPC_BLOODTALON_HATCHLING    = 39157,
+        QUEST_SAVING_THE_YOUNG      = 24623,
+        SPELL_BLOODTALON_WHISTLE    = 70874,
     };
 
     struct npc_lost_bloodtalon_hatchlingAI : public ScriptedAI
@@ -641,8 +641,8 @@ public:
             m_player = NULL;
         }
 
-        void SpellHit(Unit* caster, SpellInfo const* spell) 
-        { 
+        void SpellHit(Unit* caster, SpellInfo const* spell)
+        {
             if (spell->Id == SPELL_BLOODTALON_WHISTLE && m_phase == 0)
                 if (m_player = caster->ToPlayer())
                     if (m_player->GetQuestStatus(QUEST_SAVING_THE_YOUNG) == QUEST_STATUS_INCOMPLETE)
@@ -674,18 +674,18 @@ public:
         void DoWork()
         {
             switch (m_phase)
-            {           
-                case 1:
-                {
-                    if (!m_player)
-                        me->DespawnOrUnsummon();
-                    if (m_player->IsDead() || m_player->GetQuestStatus(QUEST_SAVING_THE_YOUNG) == QUEST_STATUS_REWARDED)
-                        me->DespawnOrUnsummon();                    
-                    break;
-                }
-                default:
-                    break;
-                }
+            {
+            case 1:
+            {
+                if (!m_player)
+                    me->DespawnOrUnsummon();
+                if (m_player->IsDead() || m_player->GetQuestStatus(QUEST_SAVING_THE_YOUNG) == QUEST_STATUS_REWARDED)
+                    me->DespawnOrUnsummon();
+                break;
+            }
+            default:
+                break;
+            }
         }
     };
 
@@ -734,21 +734,21 @@ public:
 
     enum eAreaTrigger
     {
-        QUEST_YOUNG_AND_VICIOUS = 24626,
-        NPC_SWIFTCLAW = 38002,
+        QUEST_YOUNG_AND_VICIOUS     = 24626,
+        NPC_SWIFTCLAW               = 38002,
     };
 
-    bool OnTrigger(Player* player, const AreaTriggerEntry* at) OVERRIDE
+    bool OnTrigger(Player* player, const AreaTriggerEntry* at) override
     {
         if (player && player->GetQuestStatus(QUEST_YOUNG_AND_VICIOUS) == QUEST_STATUS_INCOMPLETE)
-            if (Vehicle* vehicle = player->GetVehicle())
-                if (Unit* base = vehicle->GetBase())
-                    if (Creature* raptor = base->ToCreature())
-                    {
-                        player->Dismount();
-                        player->KilledMonsterCredit(NPC_SWIFTCLAW);
-                        raptor->DespawnOrUnsummon();
-                    }
+        if (Vehicle* vehicle = player->GetVehicle())
+            if (Unit* base = vehicle->GetBase())
+                if (Creature* raptor = base->ToCreature())
+                {
+                    player->Dismount();
+                    player->KilledMonsterCredit(NPC_SWIFTCLAW);
+                    raptor->DespawnOrUnsummon();
+                }
 
         return false;
     }
@@ -887,36 +887,14 @@ public:
     }
 };
 
-// ######################################################### quest 25035 break the lines
+// ######################################################### quest 25035 break the lines  
+// ToDo: showfight between darkspear and spitescale 
+// ToDo: mount raptor summoned by jornun
 
 class npc_jornun_38989 : public CreatureScript
 {
 public:
     npc_jornun_38989() : CreatureScript("npc_jornun_38989"){ }
-
-    enum eQuest25035
-    {
-        npc_jornun=38989,
-        npc_morakki=38442,
-        quest_break_the_lines = 25035,
-    };
-
-    bool OnGossipHello(Player* player, Creature* creature)
-    {
-        if (player && player->GetQuestStatus(quest_break_the_lines) == QUEST_STATUS_INCOMPLETE)
-        {
-            player->KilledMonsterCredit(npc_jornun);
-            creature->AI()->Talk(0);
-        }
-        return false;
-    }
-
-};
-
-class npc_morakki_38442 : public CreatureScript
-{
-public:
-    npc_morakki_38442() : CreatureScript("npc_morakki_38442"){ }
 
     enum eQuest25035
     {
@@ -929,14 +907,145 @@ public:
     {
         if (player && player->GetQuestStatus(quest_break_the_lines) == QUEST_STATUS_INCOMPLETE)
         {
-            player->KilledMonsterCredit(npc_morakki);
+            player->KilledMonsterCredit(npc_jornun);
+            creature->AI()->Talk(0);
         }
-        return true;
+
+        return false;
     }
 
 };
 
-// ######################################################### 
+class npc_morakki_38442 : public CreatureScript
+{
+public:
+    npc_morakki_38442() : CreatureScript("npc_morakki_38442"){ }
+
+    enum eQuest25035
+    {
+        npc_jornun              = 38989,
+        npc_morakki             = 38442,
+        quest_break_the_lines   = 25035,
+    };
+
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        if (player && player->GetQuestStatus(quest_break_the_lines) == QUEST_STATUS_INCOMPLETE)
+        {
+            player->KilledMonsterCredit(npc_morakki);
+            return true;
+        }
+
+        return false;
+    }
+
+};
+
+// ######################################################### quest 24814 
+// ToDo: videos not ready..i want sniffs..
+// ToDo: fight with Sea Witch 
+
+class npc_voljin_38225 : public CreatureScript
+{
+public:
+    npc_voljin_38225() : CreatureScript("npc_voljin_38225"){ }
+
+    enum eQuest25035
+    {
+        NPC_ZUNI = 38423,
+        NPC_VANIRA = 38437,
+        NPC_ZARJIRA = 38306,
+        NPC_VOLJIN = 38225,
+        QUEST_AN_ANCIENT_ENEMY = 24814,
+    };
+
+    bool OnGossipHello(Player* player, Creature* creature)
+    {
+        if (player &&  player->GetQuestStatus(QUEST_AN_ANCIENT_ENEMY) == QUEST_STATUS_INCOMPLETE)
+            player->KilledMonsterCredit(NPC_VOLJIN);            
+
+        return false;
+    }
+
+    bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action) 
+    { 
+        if (player && player->GetQuestStatus(QUEST_AN_ANCIENT_ENEMY) == QUEST_STATUS_INCOMPLETE)
+        {
+            player->KilledMonsterCredit(NPC_ZARJIRA);
+            player->TeleportTo(1, -1304.986f, -5589.265f, 23.72f, 3.85f);
+            return true;
+        }
+
+        return false; 
+    }
+
+    struct npc_voljin_38225AI : public ScriptedAI
+    {
+        npc_voljin_38225AI(Creature* creature) : ScriptedAI(creature) { }
+
+        void Reset() override
+        {
+            
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+            else
+                DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const
+    {
+        return new npc_voljin_38225AI(creature);
+    }
+};
+
+class npc_voljin_38966 : public CreatureScript
+{
+public:
+    npc_voljin_38966() : CreatureScript("npc_voljin_38966"){ }
+
+    enum eQuest25035
+    {
+      
+        QUEST_AN_ANCIENT_ENEMY = 24814,
+    };
+
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 /*opt*/) 
+    { 
+        
+        return false; 
+    }
+
+    struct npc_voljin_38966AI : public ScriptedAI
+    {
+        npc_voljin_38966AI(Creature* creature) : ScriptedAI(creature) { }
+
+        void Reset() override
+        {
+
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            if (!UpdateVictim())
+                return;
+            else
+                DoMeleeAttackIfReady();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const
+    {
+        return new npc_voljin_38966AI(creature);
+    }
+};
+
+// ######################################################### sen'jin
+
 
 
 void AddSC_zone_echo_isles()
@@ -956,4 +1065,6 @@ void AddSC_zone_echo_isles()
     new npc_darkspear_showfight();
     new npc_jornun_38989();
     new npc_morakki_38442();
+    new npc_voljin_38225();
+    new npc_voljin_38966();
 };

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -20,7 +20,7 @@
 #include "Player.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
-#include "ArcheologyMgr.h"
+#include "ArchaeologyMgr.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
 #include "Battlefield.h"
@@ -948,7 +948,7 @@ Player::Player(WorldSession* session): Unit(true), phaseMgr(this)
     memset(_CUFProfiles, 0, MAX_CUF_PROFILES * sizeof(CUFProfile*));
 
     m_achievementMgr = new AchievementMgr<Player>(this);
-    m_archeologyMgr = new ArcheologyMgr(this);
+    m_archaeologyMgr = new ArchaeologyMgr(this);
     m_reputationMgr = new ReputationMgr(this);
 }
 
@@ -981,7 +981,7 @@ Player::~Player()
     delete m_declinedname;
     delete m_runes;
     delete m_achievementMgr;
-    delete m_archeologyMgr;
+    delete m_archaeologyMgr;
     delete m_reputationMgr;
 
     for (uint8 i = 0; i < VOID_STORAGE_MAX_SLOT; ++i)
@@ -1916,13 +1916,12 @@ void Player::Update(uint32 p_time)
     if (IsHasDelayedTeleport() && IsAlive())
         TeleportTo(m_teleport_dest, m_teleport_options); 
 
-
     // npc_bot mod: Update
     if (m_botTimer > 0)
     {
         if (p_time >= m_botTimer)
             m_botTimer = 0;
-        else if (!sMapMgr->CanPlayerEnter(GetMap()->GetId(), this, false))
+        else           
             m_botTimer -= p_time;
     }
     else
@@ -2576,15 +2575,15 @@ void Player::RefreshBot(uint32 diff)
     if (m_botTimer > 0)
          return;
     
-        if (IsInFlight())
+    if (IsInFlight())
          m_botTimer = 3000;
     
-        if (!HaveBot())
+    if (!HaveBot())
          return;
     
-            //BOT REVIVE SUPPORT part 2
-            //Revive timer condition (maybe we should check whole party?)
-        bool partyInCombat = IsInCombat();
+    //BOT REVIVE SUPPORT part 2
+    //Revive timer condition (maybe we should check whole party?)
+    bool partyInCombat = IsInCombat();
     if (!partyInCombat)
     {
         for (uint8 i = 0; i != GetMaxNpcBots(); ++i)
@@ -2822,7 +2821,22 @@ void Player::RemoveBot(uint64 guid, bool final, bool eraseFromDB)
         if (gr && gr->IsMember(guid))
         {
             if (gr->GetMembersCount() > 2 || /*!GetMap()->Instanceable() || */(final && eraseFromDB))
-                gr->RemoveMember(guid);
+            {
+                if (this->GetGUID() == gr->GetLeaderGUID() && gr->GetMembersCount() == 2 && GetMap()->Instanceable())
+                {
+                    InstanceSave* save = GetInstanceSave(GetMap()->GetInstanceId(), GetMap()->IsRaid());
+                    InstancePlayerBind* playerBind = GetBoundInstance(GetMap()->GetId(), GetDifficulty(GetMap()->IsRaid()));
+                    
+                    bool permanent = false;
+                    if (playerBind)
+                        permanent = true;
+                    
+                    gr->RemoveMember(guid);
+                    BindToInstance(save, permanent, false);
+                }
+                else
+                    gr->RemoveMember(guid);
+            }
             else //just cleanup
             {
                 PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_GROUP_MEMBER);
@@ -2845,12 +2859,20 @@ void Player::RemoveBot(uint64 guid, bool final, bool eraseFromDB)
             ClearBotMustBeCreated(guid);
             if (eraseFromDB)//by command
             {
-                PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NPCBOT_ACTIVE);
-                stmt->setUInt8(0, uint8(0));
-                stmt->setUInt32(1, GetGUIDLow());
-                stmt->setUInt32(2, m_bot->GetEntry());
+                // old version: set status to "not active".. all data of bot, stay in db..
+                //PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NPCBOT_ACTIVE);
+                //stmt->setUInt8(0, uint8(0));
+                //stmt->setUInt32(1, GetGUIDLow());
+                //stmt->setUInt32(2, m_bot->GetEntry());
+                //CharacterDatabase.Execute(stmt);
+                // comment: maybe what it shoult be // CharacterDatabase.PExecute("DELETE FROM `character_npcbot` WHERE `owner` = '%u' AND `entry` = '%u'", GetGUIDLow(), m_bot->GetEntry());
+
+                // new Version: delete this player::bot from characters db
+                PreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_NPCBOT);
+                stmt->setUInt32(0, GetGUIDLow());
+                stmt->setUInt32(1, m_bot->GetEntry());
                 CharacterDatabase.Execute(stmt);
-                //CharacterDatabase.PExecute("DELETE FROM `character_npcbot` WHERE `owner` = '%u' AND `entry` = '%u'", GetGUIDLow(), m_bot->GetEntry());
+                // comment: now this is a equivalent to: // CharacterDatabase.PExecute("DELETE FROM `character_npcbot` WHERE `owner` = '%u' AND `entry` = '%u'", GetGUIDLow(), m_bot->GetEntry());
             }
         }
         else
@@ -5183,10 +5205,18 @@ void Player::learnSpell(uint32 spell_id, bool dependent)
         }
     }
 
-    if (spell_id == 78670 || spell_id == 89720 || spell_id == 89721) // It adds them when you learn the spells.
+    // Archaeology: if lerning a new level, include new digsites
+    if (spell_id == 78670 || 
+        spell_id == 88961 ||
+        spell_id == 89718 ||
+        spell_id == 89719 ||
+        spell_id == 89720 ||
+        spell_id == 89721 ||
+        spell_id == 89722 ||
+        spell_id == 110393 ||
+        spell_id == 158762)
     {
-        GetArcheologyMgr().OnSkillUpdate(GetSkillValue(SKILL_ARCHAEOLOGY));
-        GetArcheologyMgr().SaveDigsitesToDB(); // Also save the sites once generated.
+        GetArchaeologyMgr().UpdateCharacterDigsite();
     }
 }
 
@@ -5215,8 +5245,9 @@ void Player::removeSpell(uint32 spell_id, bool disabled, bool learn_low_rank)
     if (itr == m_spells.end())
         return;                                             // already unleared
 
+    // Archaeology: if unlearn skill, remove all data from database
     if (spell_id == 78670)
-        CharacterDatabase.PExecute("DELETE FROM character_archaeology_digsites WHERE guid ='%u'", GetGUID());      // Remove all digsites the player has when unlearning Archaeology.
+        GetArchaeologyMgr().RemovePlayerProfession();
 
     bool giveTalentPoints = disabled || !itr->second->disabled;
 
@@ -6179,7 +6210,7 @@ void Player::DeleteFromDB(uint64 playerguid, uint32 accountId, bool updateRealmC
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_NPCBOTS);
             stmt->setUInt32(0, guid);
             trans->Append(stmt);
-            //CharacterDatabase.PExecute("DELETE FROM `character_npcbot` WHERE `owner` = '%u'", guid);
+            //CharacterDatabase.PExecute("DELETE FROM `character_npcbot` WHERE `owner` = '%u'", guid);           
             //end npc_bot
                 
             CharacterDatabase.CommitTransaction(trans);
@@ -6335,7 +6366,7 @@ void Player::ResurrectPlayer(float restore_percent, bool applySickness)
 
     SetDeathState(ALIVE);
 
-    SetWaterWalking(false);
+    SetWaterWalking(false, true);
     if (!HasUnitState(UNIT_STATE_STUNNED))
         SetRooted(false);
 
@@ -7335,6 +7366,7 @@ bool Player::UpdateGatherSkill(uint32 SkillId, uint32 SkillValue, uint32 RedLeve
                 return UpdateSkillPro(SkillId, SkillGainChance(SkillValue, RedLevel+100, RedLevel+50, RedLevel+25)*Multiplicator, gathering_skill_gain);
             else
                 return UpdateSkillPro(SkillId, (SkillGainChance(SkillValue, RedLevel+100, RedLevel+50, RedLevel+25)*Multiplicator) >> (SkillValue/sWorld->getIntConfig(CONFIG_SKILL_CHANCE_MINING_STEPS)), gathering_skill_gain);
+        // Archaeology: increase the skill points on survey
         case SKILL_ARCHAEOLOGY:
             if (sWorld->getIntConfig(CONFIG_SKILL_CHANCE_ARCHAEOLOGY_STEPS) == 0)
                 return UpdateSkillPro(SkillId, SkillGainChance(SkillValue, RedLevel+100, RedLevel+50, RedLevel+25)*Multiplicator, gathering_skill_gain);
@@ -10210,7 +10242,7 @@ void Player::SendLoot(uint64 guid, LootType loot_type)
 
         // not check distance for GO in case owned GO (fishing bobber case, for example)
         // And permit out of range GO with no owner in case fishing hole
-        if (!go || (loot_type != LOOT_FISHINGHOLE && (loot_type != LOOT_FISHING || go->GetOwnerGUID() != GetGUID()) && !go->IsWithinDistInMap(this, INTERACTION_DISTANCE)) || (loot_type == LOOT_CORPSE && go->GetRespawnTime() && go->isSpawnedByDefault()))
+        if (!go || (loot_type != LOOT_FISHINGHOLE && ((loot_type != LOOT_FISHING && loot_type != LOOT_FISHING_JUNK) || go->GetOwnerGUID() != GetGUID()) && !go->IsWithinDistInMap(this, INTERACTION_DISTANCE)) || (loot_type == LOOT_CORPSE && go->GetRespawnTime() && go->isSpawnedByDefault()))
         {
             SendLootRelease(guid);
             return;
@@ -10248,7 +10280,9 @@ void Player::SendLoot(uint64 guid, LootType loot_type)
 
             if (loot_type == LOOT_FISHING)
                 go->getFishLoot(loot, this);
-            
+            else if (loot_type == LOOT_FISHING_JUNK)
+                go->getFishLootJunk(loot, this);
+
             if (go->GetGOInfo()->type == GAMEOBJECT_TYPE_CHEST && go->GetGOInfo()->chest.groupLootRules)
             {
                 if (Group* group = GetGroup())
@@ -15821,9 +15855,13 @@ void Player::SendPreparedGossip(WorldObject* source)
     // (quest entries from quest menu will be included in list)
 
     uint32 textId = GetGossipTextId(source);
+    uint32 menuId = PlayerTalkClass->GetGossipMenu().GetMenuId();
+    uint32 npcTextId = PlayerTalkClass->GetGossipMenu().GetNpcTextId();
 
-    if (uint32 menuId = PlayerTalkClass->GetGossipMenu().GetMenuId())
+    if (menuId > 0)
         textId = GetGossipTextId(menuId, source);
+    else if (textId != 0xFFFFFF && npcTextId > 0)
+        textId = npcTextId;
 
     PlayerTalkClass->SendGossipMenu(textId, source->GetGUID());
 }
@@ -21554,7 +21592,7 @@ void Player::_SaveMonthlyQuestStatus(SQLTransaction& trans)
 void Player::_SaveSkills(SQLTransaction& trans)
 {
     if(HasSkill(SKILL_ARCHAEOLOGY))
-        GetArcheologyMgr().SaveDigsitesToDB();
+        GetArchaeologyMgr().UpdateCharacterDigsite();
 
     PreparedStatement* stmt = NULL;
     // we don't need transactions here.
@@ -22133,27 +22171,27 @@ void Player::StopCastingCharm()
     }
 }
 
-void Player::Say(const std::string& text, const uint32 language)
+void Player::Say(std::string const& text, Language language, WorldObject const* /*= nullptr*/)
 {
     std::string _text(text);
     sScriptMgr->OnPlayerChat(this, CHAT_MSG_SAY, language, _text);
 
     WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_SAY, Language(language), this, this, _text);
+    ChatHandler::BuildChatPacket(data, CHAT_MSG_SAY, language, this, this, _text);
     SendMessageToSetInRange(&data, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_SAY), true);
 }
 
-void Player::Yell(const std::string& text, const uint32 language)
+void Player::Yell(std::string const& text, Language language, WorldObject const* /*= nullptr*/)
 {
     std::string _text(text);
     sScriptMgr->OnPlayerChat(this, CHAT_MSG_YELL, language, _text);
 
     WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_YELL, Language(language), this, this, _text);
+    ChatHandler::BuildChatPacket(data, CHAT_MSG_YELL, language, this, this, _text);
     SendMessageToSetInRange(&data, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_YELL), true);
 }
 
-void Player::TextEmote(const std::string& text)
+void Player::TextEmote(std::string const& text, WorldObject const* /*= nullptr*/, bool /*= false*/)
 {
     std::string _text(text);
     sScriptMgr->OnPlayerChat(this, CHAT_MSG_EMOTE, LANG_UNIVERSAL, _text);
@@ -22163,10 +22201,10 @@ void Player::TextEmote(const std::string& text)
     SendMessageToSetInRange(&data, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), true, !GetSession()->HasPermission(rbac::RBAC_PERM_TWO_SIDE_INTERACTION_CHAT));
 }
 
-void Player::WhisperAddon(const std::string& text, const std::string& prefix, Player* receiver)
+void Player::WhisperAddon(std::string const& text, const std::string& prefix, Player* receiver)
 {
     std::string _text(text);
-    sScriptMgr->OnPlayerChat(this, CHAT_MSG_WHISPER, LANG_ADDON, _text, receiver);
+    sScriptMgr->OnPlayerChat(this, CHAT_MSG_WHISPER, uint32(LANG_ADDON), _text, receiver);
 
     if (!receiver->GetSession()->IsAddonRegistered(prefix))
         return;
@@ -22176,40 +22214,40 @@ void Player::WhisperAddon(const std::string& text, const std::string& prefix, Pl
     receiver->GetSession()->SendPacket(&data);
 }
 
-void Player::Whisper(const std::string& text, uint32 language, uint64 receiver)
+void Player::Whisper(std::string const& text, Language language, Player* target, bool /*= false*/)
 {
+    ASSERT(target);
+
     bool isAddonMessage = language == LANG_ADDON;
 
     if (!isAddonMessage) // if not addon data
         language = LANG_UNIVERSAL; // whispers should always be readable
 
-    Player* rPlayer = ObjectAccessor::FindPlayer(receiver);
-
     std::string _text(text);
-    sScriptMgr->OnPlayerChat(this, CHAT_MSG_WHISPER, language, _text, rPlayer);
+    sScriptMgr->OnPlayerChat(this, CHAT_MSG_WHISPER, language, _text, target);
 
     WorldPacket data;
     ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, Language(language), this, this, _text);
-    rPlayer->GetSession()->SendPacket(&data);
+    target->GetSession()->SendPacket(&data);
 
     // rest stuff shouldn't happen in case of addon message
     if (isAddonMessage)
         return;
 
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER_INFORM, Language(language), rPlayer, rPlayer, _text);
+    ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER_INFORM, Language(language), target, target, _text);
     GetSession()->SendPacket(&data);
 
-    if (!isAcceptWhispers() && !IsGameMaster() && !rPlayer->IsGameMaster())
+    if (!isAcceptWhispers() && !IsGameMaster() && !target->IsGameMaster())
     {
         SetAcceptWhispers(true);
         ChatHandler(GetSession()).SendSysMessage(LANG_COMMAND_WHISPERON);
     }
 
     // announce afk or dnd message
-    if (rPlayer->isAFK())
-        ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_AFK, rPlayer->GetName().c_str(), rPlayer->autoReplyMsg.c_str());
-    else if (rPlayer->isDND())
-        ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_DND, rPlayer->GetName().c_str(), rPlayer->autoReplyMsg.c_str());
+    if (target->isAFK())
+        ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_AFK, target->GetName().c_str(), target->autoReplyMsg.c_str());
+    else if (target->isDND())
+        ChatHandler(GetSession()).PSendSysMessage(LANG_PLAYER_DND, target->GetName().c_str(), target->autoReplyMsg.c_str());
 }
 
 Item* Player::GetMItem(uint32 id)
@@ -24511,6 +24549,7 @@ template void Player::UpdateVisibilityOf(Creature*      target, UpdateData& data
 template void Player::UpdateVisibilityOf(Corpse*        target, UpdateData& data, std::set<Unit*>& visibleNow);
 template void Player::UpdateVisibilityOf(GameObject*    target, UpdateData& data, std::set<Unit*>& visibleNow);
 template void Player::UpdateVisibilityOf(DynamicObject* target, UpdateData& data, std::set<Unit*>& visibleNow);
+template void Player::UpdateVisibilityOf(AreaTrigger*   target, UpdateData& data, std::set<Unit*>& visibleNow);
 
 void Player::UpdateObjectVisibility(bool forced)
 {
@@ -26961,8 +27000,9 @@ void Player::_LoadSkills(PreparedQueryResult result)
             SetSkill(SKILL_UNARMED, 0, base_skill, base_skill);
     }
 
-    if(HasSkill(SKILL_ARCHAEOLOGY)) // It loads them when it loads the skills
-        GetArcheologyMgr().Initialize();
+    // Archaeology: On Main Load, if skill is present, do a init
+    if(HasSkill(SKILL_ARCHAEOLOGY))
+        GetArchaeologyMgr().Initialize();
 }
 
 InventoryResult Player::CanEquipUniqueItem(Item* pItem, uint8 eslot, uint32 limit_count) const
@@ -28916,24 +28956,6 @@ void Player::SendRatedBGStats()
         data << uint32(0); //i + 1?
 
     GetSession()->SendPacket(&data);
-}
-
-// Archaeology system
-uint32 Player::GetDigsiteEntry()
-{
-    if (GetArcheologyMgr().m_digsites.size() == 0 || !HasSkill(SKILL_ARCHAEOLOGY))
-        return 0;
-
-    for (digSiteList::iterator iter = GetArcheologyMgr().m_digsites.begin(); iter != GetArcheologyMgr().m_digsites.end(); iter++)
-    {
-        float artifactDistance = ARCHAEOLOGY_DIG_SITE_RADIUS;
-
-        for (uint8 i = 1; i < iter->second.artifactsAvailable + 1; ++i)
-            if (artifactDistance >= GetDistance2d(iter->second.artifacts[i - 1].positionX, iter->second.artifacts[i - 1].positionY))
-                return iter->first;
-    }
-
-    return 0;
 }
 
 Guild* Player::GetGuild()

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -1170,8 +1170,8 @@ bool SmartAIMgr::IsTextValid(SmartScriptHolder const& e, uint32 id)
             default:
                 if (e.entryOrGuid < 0)
                 {
-                    entry = uint32(std::abs(e.entryOrGuid));
-                    CreatureData const* data = sObjectMgr->GetCreatureData(entry);
+                    uint32 guidLow = uint32(std::abs(e.entryOrGuid));
+                    CreatureData const* data = sObjectMgr->GetCreatureData(guidLow);
                     if (!data)
                     {
                         TC_LOG_ERROR("sql.sql", "SmartAIMgr: Entry %d SourceType %u Event %u Action %u using non-existent Creature guid %d, skipped.", e.entryOrGuid, e.GetScriptType(), e.event_id, e.GetActionType(), entry);

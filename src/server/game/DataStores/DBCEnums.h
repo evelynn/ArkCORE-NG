@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -581,7 +581,7 @@ enum CurrencyTypes
     CURRENCY_TYPE_DWARF_FRAGMENT        = 384,
     CURRENCY_TYPE_TROLL_FRAGMENT        = 385,
     CURRENCY_TYPE_FOSSIL_FRAGMENT       = 393,
-    CURRENCY_TYPE_NELF_FRAGMENT         = 394,
+    CURRENCY_TYPE_NIGHT_ELF_FRAGMENT    = 394,
     CURRENCY_TYPE_ORC_FRAGMENT          = 397,
     CURRENCY_TYPE_DRAENEI_FRAGMENT      = 398,
     CURRENCY_TYPE_VRYKUL_FRAGMENT       = 399,

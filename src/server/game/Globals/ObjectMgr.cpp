@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -2571,7 +2571,7 @@ void ObjectMgr::LoadItemTemplates()
     }
 
     // Load missing items from item_template AND overwrite data from Item-sparse.db2 (item_template is supposed to contain Item-sparse.adb data)
-    //                                               0      1      2         3     4     5          6        7      8           9         10        11        12        13
+    //                                                 0      1      2         3                     4       5          6        7      8           9         10        11        12        13
     QueryResult result = WorldDatabase.Query("SELECT entry, Class, SubClass, SoundOverrideSubclass, Name, DisplayId, Quality, Flags, FlagsExtra, Unk430_1, Unk430_2, BuyCount, BuyPrice, SellPrice, "
     //                                        14             15              16             17         18             19             20                 21
                                              "InventoryType, AllowableClass, AllowableRace, ItemLevel, RequiredLevel, RequiredSkill, RequiredSkillRank, RequiredSpell, "
@@ -2629,7 +2629,7 @@ void ObjectMgr::LoadItemTemplates()
             itemTemplate.Name1                     = fields[4].GetString();
             itemTemplate.DisplayInfoID             = fields[5].GetUInt32();
             itemTemplate.Quality                   = uint32(fields[6].GetUInt8());
-            itemTemplate.Flags                     = fields[7].GetUInt32();
+            itemTemplate.Flags                     = fields[7].GetUInt64();
             itemTemplate.Flags2                    = fields[8].GetUInt32();
             itemTemplate.Unk430_1                  = fields[9].GetFloat();
             itemTemplate.Unk430_2                  = fields[10].GetFloat();
@@ -4497,12 +4497,6 @@ void ObjectMgr::LoadScripts(ScriptsType type)
                         tableName.c_str(), tmp.Talk.TextID, tmp.id);
                     continue;
                 }
-                if (tmp.Talk.TextID < MIN_DB_SCRIPT_STRING_ID || tmp.Talk.TextID >= MAX_DB_SCRIPT_STRING_ID)
-                {
-                    TC_LOG_ERROR("sql.sql", "Table `%s` has out of range text id (dataint = %i expected %u-%u) in SCRIPT_COMMAND_TALK for script id %u",
-                        tableName.c_str(), tmp.Talk.TextID, MIN_DB_SCRIPT_STRING_ID, MAX_DB_SCRIPT_STRING_ID, tmp.id);
-                    continue;
-                }
                 if (!sObjectMgr->GetBroadcastText(uint32(tmp.Talk.TextID)))
                 {
                     TC_LOG_ERROR("sql.sql", "Table `%s` has invalid talk text id (dataint = %i) in SCRIPT_COMMAND_TALK for script id %u",
@@ -5722,19 +5716,19 @@ void ObjectMgr::LoadGraveyardZones()
         AreaTableEntry const* areaEntry = GetAreaEntryByAreaID(zoneId);
         if (!areaEntry)
         {
-            TC_LOG_ERROR("sql.sql", "Table `game_graveyard_zone` has a record for not existing zone id (%u), skipped.", zoneId);
+            TC_LOG_ERROR("sql.sql", "Table `game_graveyard_zone` Id (%u) has a record for not existing zone id (%u), skipped.", safeLocId, zoneId);
             continue;
         }
 
         if (areaEntry->zone != 0)
         {
-            TC_LOG_ERROR("sql.sql", "Table `game_graveyard_zone` has a record for subzone id (%u) instead of zone, skipped.", zoneId);
+            TC_LOG_ERROR("sql.sql", "Table `game_graveyard_zone` Id (%u) has a record for subzone id (%u) instead of zone, skipped.", safeLocId, zoneId);
             continue;
         }
 
         if (team != 0 && team != HORDE && team != ALLIANCE)
         {
-            TC_LOG_ERROR("sql.sql", "Table `game_graveyard_zone` has a record for non player faction (%u), skipped.", team);
+            TC_LOG_ERROR("sql.sql", "Table `game_graveyard_zone` Id (%u) has a record for non player faction (%u), skipped.", safeLocId, team);
             continue;
         }
 
@@ -8626,33 +8620,6 @@ uint32 ObjectMgr::GetScriptId(const char *name)
     return uint32(itr - _scriptNamesStore.begin());
 }
 
-void ObjectMgr::CheckScripts(ScriptsType type, std::set<int32>& ids)
-{
-    ScriptMapMap* scripts = GetScriptsMapByType(type);
-    if (!scripts)
-        return;
-
-    for (ScriptMapMap::const_iterator itrMM = scripts->begin(); itrMM != scripts->end(); ++itrMM)
-    {
-        for (ScriptMap::const_iterator itrM = itrMM->second.begin(); itrM != itrMM->second.end(); ++itrM)
-        {
-            switch (itrM->second.command)
-            {
-                case SCRIPT_COMMAND_TALK:
-                {
-                    if (!GetTrinityStringLocale (itrM->second.Talk.TextID))
-                        TC_LOG_ERROR("sql.sql", "Table `%s` references invalid text id %u from `db_script_string`, script id: %u.", GetScriptsTableNameByType(type).c_str(), itrM->second.Talk.TextID, itrMM->first);
-
-                    if (ids.find(itrM->second.Talk.TextID) != ids.end())
-                        ids.erase(itrM->second.Talk.TextID);
-                }
-                default:
-                    break;
-            }
-        }
-    }
-}
-
 void ObjectMgr::LoadBroadcastTexts()
 {
     uint32 oldMSTime = getMSTime();
@@ -8786,23 +8753,6 @@ void ObjectMgr::LoadBroadcastTextLocales()
     while (result->NextRow());
 
     TC_LOG_INFO("server.loading", ">> Loaded %u broadcast text locales in %u ms", count, GetMSTimeDiffToNow(oldMSTime));
-}
-
-void ObjectMgr::LoadDbScriptStrings()
-{
-    LoadTrinityStrings("db_script_string", MIN_DB_SCRIPT_STRING_ID, MAX_DB_SCRIPT_STRING_ID);
-
-    std::set<int32> ids;
-
-    for (int32 i = MIN_DB_SCRIPT_STRING_ID; i < MAX_DB_SCRIPT_STRING_ID; ++i)
-        if (GetTrinityStringLocale(i))
-            ids.insert(i);
-
-    for (int type = SCRIPTS_FIRST; type < SCRIPTS_LAST; ++type)
-        CheckScripts(ScriptsType(type), ids);
-
-    for (std::set<int32>::const_iterator itr = ids.begin(); itr != ids.end(); ++itr)
-        TC_LOG_ERROR("sql.sql", "Table `db_script_string` has unused string id  %u", *itr);
 }
 
 CreatureBaseStats const* ObjectMgr::GetCreatureBaseStats(uint8 level, uint8 unitClass)
@@ -9183,8 +9133,8 @@ void ObjectMgr::LoadPhaseDefinitions()
 
     uint32 oldMSTime = getMSTime();
 
-    //                                                 0       1       2         3            4           5
-    QueryResult result = WorldDatabase.Query("SELECT zoneId, entry, phasemask, phaseId, terrainswapmap, flags FROM `phase_definitions` ORDER BY `entry` ASC");
+    //                                                 0       1       2         3            4                 5           6
+    QueryResult result = WorldDatabase.Query("SELECT zoneId, entry, phasemask, phaseId, terrainswapmap, worldMapAreaSwap, flags FROM `phase_definitions` ORDER BY `entry` ASC");
 
     if (!result)
     {
@@ -9201,11 +9151,12 @@ void ObjectMgr::LoadPhaseDefinitions()
         PhaseDefinition PhaseDefinition;
 
         PhaseDefinition.zoneId                = fields[0].GetUInt32();
-        PhaseDefinition.entry                 = fields[1].GetUInt32();
-        PhaseDefinition.phasemask             = fields[2].GetUInt32();
-        PhaseDefinition.phaseId               = fields[3].GetUInt32();
-        PhaseDefinition.terrainswapmap        = fields[4].GetUInt32();
-        PhaseDefinition.flags                 = fields[5].GetUInt32();
+        PhaseDefinition.entry                 = fields[1].GetUInt16();
+        PhaseDefinition.phasemask             = fields[2].GetUInt64();
+        PhaseDefinition.phaseId               = fields[3].GetUInt16();
+        PhaseDefinition.terrainswapmap        = fields[4].GetUInt16();
+        PhaseDefinition.worldMapAreaSwap      = fields[5].GetUInt16();
+        PhaseDefinition.flags                 = fields[6].GetUInt8();
 
         // Checks
         if ((PhaseDefinition.flags & PHASE_FLAG_OVERWRITE_EXISTING) && (PhaseDefinition.flags & PHASE_FLAG_NEGATE_PHASE))
@@ -9229,8 +9180,8 @@ void ObjectMgr::LoadSpellPhaseInfo()
 
     uint32 oldMSTime = getMSTime();
 
-    //                                               0       1            2
-    QueryResult result = WorldDatabase.Query("SELECT id, phasemask, terrainswapmap FROM `spell_phase`");
+    //                                               0             1            2                 3
+    QueryResult result = WorldDatabase.Query("SELECT spell_id, phasemask, terrainswapmap, worldmapareaswap FROM `spell_phase`");
 
     if (!result)
     {
@@ -9259,8 +9210,9 @@ void ObjectMgr::LoadSpellPhaseInfo()
             continue;
         }
 
-        spellPhaseInfo.phasemask              = fields[1].GetUInt32();
-        spellPhaseInfo.terrainswapmap         = fields[2].GetUInt32();
+        spellPhaseInfo.phasemask              = fields[1].GetUInt64();
+        spellPhaseInfo.terrainswapmap         = fields[2].GetUInt16();
+        spellPhaseInfo.worldmapareaswap       = fields[3].GetUInt16();
 
         _SpellPhaseStore[spellPhaseInfo.spellId] = spellPhaseInfo;
 
@@ -9268,6 +9220,45 @@ void ObjectMgr::LoadSpellPhaseInfo()
     }
     while (result->NextRow());
     TC_LOG_INFO("server.loading", ">> Loaded %u spell dbc infos in %u ms.", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
+void ObjectMgr::LoadPhaseArea()
+{
+    _PhaseAreaStore.clear();
+
+    uint32 oldMSTime = getMSTime();
+
+    //                                                 0       1       2         3            4           5
+    QueryResult result = WorldDatabase.Query("SELECT areaId, entry, quest_start, quest_end, quest_start_status, quest_end_status, flags FROM `phase_area` ORDER BY `entry` ASC");
+
+    if (!result)
+    {
+        TC_LOG_INFO("server.loading", ">> Loaded 0 phase areas. DB table `phase_areas` is empty.");
+        return;
+    }
+
+    uint32 count = 0;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        PhaseArea area;
+        area.areaId                 = fields[0].GetUInt32();
+        area.entry                  = fields[1].GetUInt32();
+        area.quest_start            = fields[2].GetUInt32();
+        area.quest_end              = fields[3].GetUInt32();
+        area.quest_start_status     = fields[4].GetUInt32();
+        area.quest_end_status       = fields[5].GetUInt32();
+        area.flags                  = fields[6].GetUInt32();
+
+        _PhaseAreaStore[area.areaId].push_back(area);
+
+        ++count;
+
+    } while (result->NextRow());
+
+    TC_LOG_INFO("server.loading", ">> Loaded %u phase areas in %u ms.", count, GetMSTimeDiffToNow(oldMSTime));
 }
 
 GameObjectTemplate const* ObjectMgr::GetGameObjectTemplate(uint32 entry)

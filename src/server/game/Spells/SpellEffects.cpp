@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -65,7 +65,7 @@
 #include "PathGenerator.h"
 #include "Guild.h"
 #include "GuildMgr.h"
-#include "ArcheologyMgr.h"
+#include "ArchaeologyMgr.h"
 #include "ReputationMgr.h"
 #include "AreaTrigger.h"
 
@@ -359,6 +359,38 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
 
                 switch (m_spellInfo->Id)                     // better way to check unknown
                 {
+                    // percent from health with min
+                    case 25599: // Thundercrash
+                    {
+                        damage = unitTarget->GetHealth() / 2;
+                        if (damage < 200)
+                            damage = 200;
+                        break;
+                    }
+                    // Consumption
+                    case 28865:
+                        damage = (((InstanceMap*)m_caster->GetMap())->GetDifficulty() == REGULAR_DIFFICULTY ? 2750 : 4250);
+                        break;
+                    // arcane charge. must only affect demons (also undead?)
+                    case 45072:
+                    {
+                        if (unitTarget->GetCreatureType() != CREATURE_TYPE_DEMON || unitTarget->GetCreatureType() != CREATURE_TYPE_UNDEAD)
+                            return;
+                        break;
+                    }
+                    // Gargoyle Strike
+                    case 51963:
+                    {
+                        // about +4 base spell dmg per level
+                        damage = (m_caster->getLevel() - 60) * 4 + 60;
+                        break;
+                    }
+                    case 75566:
+                    case 91052:
+                    {
+                        damage = m_spellInfo->Effects[EFFECT_0].BasePoints * unitTarget->GetMaxHealth() / 100;
+                        break;
+                    }
                     // Meltdown
                     case 98649:
                     case 101646:
@@ -389,32 +421,6 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
                         else
                             damage = m_spellInfo->Effects[2].BasePoints;
                         break;
-                    // Consumption
-                    case 28865:
-                        damage = (((InstanceMap*)m_caster->GetMap())->GetDifficulty() == REGULAR_DIFFICULTY ? 2750 : 4250);
-                        break;
-                    // percent from health with min
-                    case 25599:                             // Thundercrash
-                    {
-                        damage = unitTarget->GetHealth() / 2;
-                        if (damage < 200)
-                            damage = 200;
-                        break;
-                    }
-                    // arcane charge. must only affect demons (also undead?)
-                    case 45072:
-                    {
-                        if (unitTarget->GetCreatureType() != CREATURE_TYPE_DEMON || unitTarget->GetCreatureType() != CREATURE_TYPE_UNDEAD)
-                            return;
-                        break;
-                    }
-                    // Gargoyle Strike
-                    case 51963:
-                    {
-                        // about +4 base spell dmg per level
-                        damage = (m_caster->getLevel() - 60) * 4 + 60;
-                        break;
-                    }
                 }
                 break;
             }
@@ -436,65 +442,66 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
             }
             case SPELLFAMILY_WARLOCK:
             {
-                //Pet Firebolt
-                if (m_spellInfo->Id == 3110)
-                    if (m_caster->IsPet())
-                    {
-                         if (Unit* owner = m_caster->GetOwner())
-                         {
-                             int32 SpellPower = m_caster->SpellBaseDamageBonusDone(SPELL_SCHOOL_MASK_FIRE);
-                             damage += (SpellPower * 0.50) * 0.657;
-
-                            if (owner->HasAura(91986)) // Burning Embers - Firebolt
-                            {
-                                int32 bp0 = damage * (0.5 / 7);
-                                owner->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
-                            }
-                            if (m_caster->GetOwner()->ToPlayer()->HasAura(85112))
-                            {
-                                int32 bp0 = damage * (1.0 / 7);
-                                owner->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
-                            }
-                      }
-                }
-
-                if (m_spellInfo->Id == 6353)  // Burning embers - Soul Fire
+                switch (m_spellInfo->Id)
                 {
-                    if (m_caster->HasAura(91986))
-                    {
-                       int32 bp0 = damage * (0.5 / 7);
-                       m_caster->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
-                    }
-                    if (m_caster->HasAura(85112))
-                    {
-                       int32 bp0 = damage * (1.0 / 7);
-                       m_caster->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
-                    }
+                    case 0:
+                        break;
+                    case 3110: //Pet Firebolt
+                        if (m_spellInfo->Id == 3110)
+                            if (m_caster->IsPet())
+                            {
+                                if (Unit* owner = m_caster->GetOwner())
+                                {
+                                    int32 SpellPower = m_caster->SpellBaseDamageBonusDone(SPELL_SCHOOL_MASK_FIRE);
+                                    damage += (SpellPower * 0.50) * 0.657;
+
+                                    if (owner->HasAura(91986)) // Burning Embers - Firebolt
+                                    {
+                                        int32 bp0 = damage * (0.5 / 7);
+                                        owner->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
+                                    }
+                                    if (m_caster->GetOwner()->ToPlayer()->HasAura(85112))
+                                    {
+                                        int32 bp0 = damage * (1.0 / 7);
+                                        owner->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
+                                    }
+                                }
+                            }
+                        break;
+                    case 6353: // Burning embers - Soul Fire
+                        if (m_caster->HasAura(91986))
+                        {
+                            int32 bp0 = damage * (0.5 / 7);
+                            m_caster->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
+                        }
+                        if (m_caster->HasAura(85112))
+                        {
+                            int32 bp0 = damage * (1.0 / 7);
+                            m_caster->CastCustomSpell(unitTarget, 85421, &bp0, NULL, NULL, true);
+                        }
+                        break;
+                    case 6360: //Whiplash
+                        if (m_caster->IsPet())
+                        {
+                            int32 SpellPower = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
+                            damage += 0.85 * (SpellPower * 0.5);
+                        }
+                        break;
+                    case 7814: //Lash of Pain
+                        if (m_caster->IsPet())
+                        {
+                            int32 SpellPower = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
+                            damage += 0.612 * (SpellPower * 0.5);
+                        }
+                        break;
+                    case 54049: //Shadow Bite
+                        if (m_caster->IsPet())
+                        {
+                            int32 SpellPower = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
+                            damage += 0.614 * (SpellPower * 0.5);
+                        }
+                        break;
                 }
-
-                //Shadow Bite
-                if (m_spellInfo->Id == 54049)
-                    if (m_caster->IsPet())
-                    {
-                        int32 SpellPower = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
-                        damage += 0.614 * (SpellPower * 0.5);
-                    }
-
-                //Lash of Pain
-                if (m_spellInfo->Id == 7814)
-                    if (m_caster->IsPet())
-                    {
-                        int32 SpellPower = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
-                        damage += 0.612 * (SpellPower * 0.5);
-                    }
-
-                //Whiplash
-                if (m_spellInfo->Id == 6360)
-                    if (m_caster->IsPet())
-                    {
-                        int32 SpellPower = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
-                        damage += 0.85 * (SpellPower * 0.5);
-                    }
 
                 // Incinerate Rank 1 & 2
                 if ((m_spellInfo->SpellFamilyFlags[1] & 0x000040) && m_spellInfo->SpellIconID == 2128)
@@ -673,8 +680,14 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
                 // Starfire
                 else if (m_spellInfo->SpellFamilyFlags[0] & 0x00000004)
                 {
-                    if (m_caster->ToPlayer()->HasAura(16913)) // Check Balance spec
-                        m_caster->SetEclipsePower(int32(m_caster->GetEclipsePower() + 20));
+                    if (Player* player = m_caster->ToPlayer()) // ToDo  enable for npcbot 
+                        if (player->HasAura(16913)) // Check Balance spec 
+                            player->SetEclipsePower(int32(player->GetEclipsePower() + 20));
+
+                    if (Creature* creature = m_caster->ToCreature()) // enable spell for NpcBot
+                        if (creature->GetIAmABot())
+                            if (creature->HasAura(16913))
+                                creature->SetEclipsePower(int32(creature->GetEclipsePower() + 20));
 
                     //Euphoria
                     if ((m_caster->HasAura(81061) && roll_chance_i(12)) || (m_caster->HasAura(81062) && roll_chance_i(24)))
@@ -687,7 +700,12 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
                     if (Player* player = m_caster->ToPlayer())
                         if (player->HasAura(16913)) // Check Balance spec
                             m_caster->SetEclipsePower(int32(m_caster->GetEclipsePower() - 13));
-                    
+                        
+                    if (Creature* creature = m_caster->ToCreature()) // enable spell for NpcBot
+                        if (creature->GetIAmABot())
+                            if (creature->HasAura(16913))
+                                creature->SetEclipsePower(int32(creature->GetEclipsePower() - 13));
+
                     // Improved Insect Swarm
                     if (AuraEffect const * aurEff = m_caster->GetDummyAuraEffect(SPELLFAMILY_DRUID, 1771, 0))
                         if (unitTarget->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_DRUID, 0x00200000, 0, 0))
@@ -783,7 +801,8 @@ void Spell::EffectSchoolDMG(SpellEffIndex effIndex)
                         if (uint32 combo = player->GetComboPoints())
                         {
                             float ap = m_caster->GetTotalAttackPowerValue(BASE_ATTACK);
-                            damage += int32(ap * combo * 0.091f);
+                            //damage += int32(ap * combo * 0.091f);
+                            damage += irand(int32(ap * combo * 0.03f), int32(ap * combo * 0.07f));
 
                             // Eviscerate and Envenom Bonus Damage (item set effect)
                             if (m_caster->HasAura(37169))
@@ -1759,6 +1778,11 @@ void Spell::EffectTriggerSpell(SpellEffIndex effIndex)
                 }
                 return;
             }
+            // triggered from (dbc) spell 89023, but spell 32733 not exist
+            case 32733:
+            {
+                return;
+            }
         }
     }
 
@@ -1776,6 +1800,11 @@ void Spell::EffectTriggerSpell(SpellEffIndex effIndex)
 
     // normal case
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(triggered_spell_id);
+
+    // spell 89023 trigger (dbc) spell 32733, but spell 32733 not exist
+    if (m_spellInfo->Id == 89023 && triggered_spell_id == 32733)
+        return;
+
     if (!spellInfo)
     {
         TC_LOG_ERROR("spells", "Spell::EffectTriggerSpell spell %u tried to trigger unknown spell %u", m_spellInfo->Id, triggered_spell_id);
@@ -2646,91 +2675,9 @@ void Spell::EffectCreateItem(SpellEffIndex effIndex)
     if (effectHandleMode != SPELL_EFFECT_HANDLE_HIT_TARGET)
         return;
 
+    // Archaeology: complete project, last part: create item, handle currency, create new project 
     if (m_caster->ToPlayer() && m_caster->ToPlayer()->HasSkill(SKILL_ARCHAEOLOGY))
-    {
-        for (uint8 i = 1; i < 28; ++i)
-        {
-            if (i == 9)
-                i = 27;
-
-            ResearchProjectEntry* rp = sResearchProjectStore.LookupRow(m_caster->ToPlayer()->GetArcheologyMgr().m_researchProject[i]);
-            if (!rp)
-                continue;
-
-            if (rp->ProjectSpell == m_spellInfo->Id)
-            {
-                int32 reqFragments = int32(rp->RequiredFragments);
-                uint32 currencyId = 0;
-                uint32 stone = 0;
-                switch (rp->ResearchBranchID)
-                {
-                    // Dwarf
-                    case 1: currencyId = CURRENCY_TYPE_DWARF_FRAGMENT;  stone = ARCHEOLOGY_STONE_DWARF; break;
-                    // Draenei
-                    case 2: currencyId = CURRENCY_TYPE_DRAENEI_FRAGMENT;  stone = ARCHEOLOGY_STONE_DRAENEI; break;
-                    // Fossil
-                    case 3: currencyId = CURRENCY_TYPE_FOSSIL_FRAGMENT;  stone = ARCHEOLOGY_STONE_FOSSIL; break;
-                    // Night Elf
-                    case 4: currencyId = CURRENCY_TYPE_NELF_FRAGMENT;  stone = ARCHEOLOGY_STONE_NIGHT_ELF; break;
-                    // Nerubian
-                    case 5: currencyId = CURRENCY_TYPE_NERUBIAN_FRAGMENT;  stone = ARCHEOLOGY_STONE_NERUBIAN; break;
-                    // Orc
-                    case 6: currencyId = CURRENCY_TYPE_ORC_FRAGMENT;  stone = ARCHEOLOGY_STONE_ORC; break;
-                    // Tol'vir
-                    case 7: currencyId = CURRENCY_TYPE_TOLVIR_FRAGMENT;  stone = ARCHEOLOGY_STONE_TOLVIR; break;
-                    // Troll
-                    case 8: currencyId = CURRENCY_TYPE_TROLL_FRAGMENT;  stone = ARCHEOLOGY_STONE_TROLL; break;
-                    // Vrykul
-                    case 27: currencyId = CURRENCY_TYPE_VRYKUL_FRAGMENT; stone = ARCHEOLOGY_STONE_VRYKUL; break;
-                }
-
-                if (damage > 0)
-                {
-                    if (m_caster->ToPlayer()->HasItemCount(stone, damage, false))
-                    {
-                        if (Item* pStone = m_caster->ToPlayer()->GetItemByEntry(stone))
-                        {
-                            if (pStone->GetCount() > uint32(damage))
-                                pStone->SetCount(pStone->GetCount() - damage);
-                            else if (pStone->GetCount() == uint32(damage))
-                                m_caster->ToPlayer()->DestroyItem(pStone->GetBagSlot(), pStone->GetSlot(), true);
-                            else
-                            {
-                                for (int x = 0; x < damage;)
-                                {
-                                    if (x > 0)
-                                    {
-                                        pStone = m_caster->ToPlayer()->GetItemByEntry(stone);
-                                        if (pStone && pStone->GetCount() > uint32(damage) - x)
-                                        {
-                                            pStone->SetCount(pStone->GetCount() - damage + x);
-                                            break;
-                                        }
-                                    }
-                                    if (pStone)
-                                        m_caster->ToPlayer()->DestroyItem(pStone->GetBagSlot(), pStone->GetSlot(), true);
-                                    x += pStone->GetCount();
-                                }
-                            }
-
-                            reqFragments -= 12 * damage;
-                        }
-                    }
-                }
-
-                m_caster->ToPlayer()->ModifyCurrency(currencyId, -(reqFragments));
-                m_caster->ToPlayer()->GetArcheologyMgr().GenerateResearchProject(rp->ResearchBranchID, true, rp->ProjectSpell);
-
-                // Send research complete opcode.
-                WorldPacket completed(SMSG_RESEARCH_COMPLETE, 12);
-                completed << rp->ResearchBranchID << uint32(0) << rp->ID;           // I have my theory that the second must be onRare, but I'm not quite sure.
-                m_caster->ToPlayer()->GetSession()->SendPacket(&completed);
-
-                damage = 0;
-                break;
-            }
-        }
-    }
+        m_caster->ToPlayer()->GetArchaeologyMgr().EffectOnCreateItem(m_spellInfo->Id, damage);
 
     DoCreateItem(effIndex, m_spellInfo->Effects[effIndex].ItemType);
     ExecuteLogEffectCreateItem(effIndex, m_spellInfo->Effects[effIndex].ItemType);
@@ -4221,13 +4168,11 @@ void Spell::EffectWeaponDmg(SpellEffIndex effIndex)
                 case 71232:
                 {
                     spell_bonus = irand(-100, 100);
-
-
+                    break;
                 }
                 case 75002:
                 {
-                    m_caster->Attack(unitTarget, true);
-                    spell_bonus = unitTarget->GetHealth() + 1;
+                    totalDamagePercentMod = 1.0f;                   
                     break;
                 }
             default:
@@ -5988,40 +5933,20 @@ void Spell::EffectSummonObject(SpellEffIndex effIndex)
 
     uint32 go_id = m_spellInfo->Effects[effIndex].MiscValue;
 
-    if (m_spellInfo->Id == 80451) // Survey spell
+    sCharacterDigsite* cd = new sCharacterDigsite();
+    cd->Clear();
+    uint16 pos = 0;
+    float dist = 0;
+    float orientation = 0;
+
+    if (m_spellInfo->Id == 80451) // Archaeology: Survey spell
     {
-        go_id = m_caster->ToPlayer()->GetArcheologyMgr().OnSurveyBotActivated();
+        go_id = m_caster->ToPlayer()->GetArchaeologyMgr().OnSurveyBotActivated(cd, pos, dist, orientation);
         if (go_id == 0) // If location is not valid, returns 0, and we must stop it.
             return;
     }
 
     uint8 slot = m_spellInfo->Effects[effIndex].Effect - SPELL_EFFECT_SUMMON_OBJECT_SLOT1;
-
-    uint32 branchId = 0;
-    switch (go_id)
-    {
-        // Dwarf
-        case 204282: branchId = 1; break;
-        // Draenei
-        case 207188: branchId = 2; break;
-        // Fossil
-        case 206836: branchId = 3; break;
-        // Nerubian
-        case 203078: branchId = 5; break;
-        // Night Elf
-        case 203071: branchId = 4; break;
-        // Orc
-        case 207187: branchId = 6; break;
-        // Tol'vir
-        case 207190: branchId = 7; break;
-        // Troll
-        case 202655: branchId = 8; break;
-        // Vrykul
-        case 207189: branchId = 27; break;
-    }
-
-    if (branchId > 0 && m_caster->ToPlayer()->GetArcheologyMgr().m_researchProject[branchId] == 0)
-        m_caster->ToPlayer()->GetArcheologyMgr().GenerateResearchProject(branchId, false, 0);
 
     if (uint64 guid = m_caster->m_ObjectSlot[slot])
     {
@@ -6046,10 +5971,12 @@ void Spell::EffectSummonObject(SpellEffIndex effIndex)
         m_caster->GetClosePoint(x, y, z, DEFAULT_WORLD_OBJECT_SIZE);
 
     Map* map = m_caster->GetMap();
-    if (m_spellInfo->Id == 80451)
+    if (m_spellInfo->Id == 80451) // Archaeology: Survey successful, summit binoculars bot or chest
     {
+        float deviation = m_caster->ToPlayer()->GetArchaeologyMgr().GetOrientationWithDeviation(dist, orientation);
+        m_caster->GetClosePoint(x, y, z, DEFAULT_WORLD_OBJECT_SIZE);
         if (!go->Create(sObjectMgr->GenerateLowGuid(HIGHGUID_GAMEOBJECT), go_id, map,
-            m_caster->GetPhaseMask(), x, y, z, m_caster->ToPlayer()->GetArcheologyMgr().SetNearestFindOrientation(), 0.0f, 0.0f, 0.0f, 0.0f, 0, GO_STATE_READY))
+            m_caster->GetPhaseMask(), x, y, z, deviation, 0.0f, 0.0f, 0.0f, 0.0f, 0, GO_STATE_READY))
         {
             delete go;
             return;

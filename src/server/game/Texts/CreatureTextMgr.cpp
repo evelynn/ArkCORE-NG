@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -231,6 +231,7 @@ uint32 CreatureTextMgr::SendChat(Creature* source, uint8 textGroup, WorldObject 
             groupItr->second.clear();
         }
 
+        // source->ClearTextRepeatGroup(textGroup);  // prepared test
         tempGroup = textGroupContainer;
     }
 
@@ -274,6 +275,9 @@ uint32 CreatureTextMgr::SendChat(Creature* source, uint8 textGroup, WorldObject 
     ChatMsg finalType = (msgType == CHAT_MSG_ADDON) ? iter->type : msgType;
     Language finalLang = (language == LANG_ADDON) ? iter->lang : language;
     uint32 finalSound = sound ? sound : iter->sound;
+
+    //if (range == TEXT_RANGE_NORMAL)
+    //    range = iter->TextRange;   // TextRange is a new element in database.. prepared for future use..
 
     if (finalSound)
         SendSound(source, finalSound, finalType, whisperTarget, range, team, gmOnly);

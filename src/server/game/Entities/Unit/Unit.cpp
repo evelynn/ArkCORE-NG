@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -23,6 +23,7 @@
 #include "BattlefieldMgr.h"
 #include "Battleground.h"
 #include "CellImpl.h"
+#include "ChatTextBuilder.h"
 #include "ConditionMgr.h"
 #include "CreatureAI.h"
 #include "CreatureAIImpl.h"
@@ -1859,6 +1860,14 @@ void Unit::CalcAbsorbResist(Unit* victim, SpellSchoolMask schoolMask, DamageEffe
             splitDamage = RoundToInterval(splitDamage, uint32(0), uint32(dmgInfo.GetDamage()));
 
             dmgInfo.AbsorbDamage(splitDamage);
+
+            // check if caster is immune to damage
+            if (caster->IsImmunedToDamage(schoolMask))
+            {
+                victim->SendSpellMiss(caster, (*itr)->GetSpellInfo()->Id, SPELL_MISS_IMMUNE);
+                continue;
+            }
+
             uint32 split_absorb = 0;
             DealDamageMods(caster, splitDamage, &split_absorb);
 
@@ -5319,15 +5328,17 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 {
                     if (!victim || victim->HasAura(99263))
                         return false;
-
-                    int32 stack = ToPlayer()->GetAura(dummySpell->Id)->GetStackAmount();
-                    if (stack >= 3)
+                    if (Player* player = ToPlayer())
                     {
-                        if (!victim->HasAura(99262))
-                            CastSpell(victim, 99262, true);
+                        int32 stack = player->GetAura(dummySpell->Id)->GetStackAmount();
+                        if (stack >= 3)
+                        {
+                            if (!victim->HasAura(99262))
+                                CastSpell(victim, 99262, true);
 
-                        if (victim->HasAura(99262))
-                            ToPlayer()->GetAura(99262)->SetStackAmount(stack / 3);
+                            if (victim->HasAura(99262))
+                                player->GetAura(99262)->SetStackAmount(stack / 3);
+                        }
                     }
                     break;
                 }
@@ -5771,6 +5782,33 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 triggered_spell_id = 37436;
                 break;
             }
+            switch (dummySpell->Id)
+            {
+                // Glyph of Icy Veins
+                case 56374:
+                {
+                    RemoveAurasByType(SPELL_AURA_HASTE_SPELLS, 0, 0, true, false);
+                    RemoveAurasByType(SPELL_AURA_MOD_DECREASE_SPEED);
+                    return true;
+                }
+                // Glyph of Polymorph
+                case 56375:
+                {
+                    if (!target)
+                        return false;
+                    target->RemoveAurasByType(SPELL_AURA_PERIODIC_DAMAGE, 0, target->GetAura(32409)); // SW:D shall not be removed.
+                    target->RemoveAurasByType(SPELL_AURA_PERIODIC_DAMAGE_PERCENT);
+                    target->RemoveAurasByType(SPELL_AURA_PERIODIC_LEECH);
+                    return true;
+                }
+                case 79683: // Arcane Missiles!
+                {
+                    // Do not let arcane missiles missile remove the activation aura
+                    if (procSpell->Id == 7268)
+                        return false;
+                    break;
+                }
+            }
         }
         case SPELLFAMILY_WARLOCK:
         {
@@ -5863,8 +5901,9 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
             if (dummySpell->SpellIconID == 1869)
             {
                 if (procSpell && (procEx & PROC_EX_CRITICAL_HIT))
-                    ToPlayer()->UpdateSpellCooldown(34433, -triggerAmount);
-
+                    if (Player* player = ToPlayer())
+                        player->UpdateSpellCooldown(34433, -triggerAmount);
+                
                 break;
             }
             switch (dummySpell->Id)
@@ -6024,24 +6063,27 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 // Leader of the Pack
                 case 17007:
                 {
-                   if (!(procEx & PROC_EX_CRITICAL_HIT) || ToPlayer()->HasSpellCooldown(34299))
-                        return false;
+                    if (Player* player = ToPlayer())
+                    {
+                        if (!(procEx & PROC_EX_CRITICAL_HIT) || player->HasSpellCooldown(34299))
+                            return false;
 
-                   if (!HasAura(5487) && !HasAura(768))
-                        return false;
+                        if (!HasAura(5487) && !HasAura(768))
+                            return false;
 
-                    basepoints0 = int32(CountPctFromMaxHealth(4));
-                    target = this;
-                    //Health part
-                    int32 basepoints = GetMaxHealth() * 4 / 100;
-                    CastCustomSpell(this, 34299, &basepoints, NULL, NULL, true);
-                    if (triggeredByAura->GetCasterGUID() != GetGUID())
+                        basepoints0 = int32(CountPctFromMaxHealth(4));
+                        target = this;
+                        //Health part
+                        int32 basepoints = GetMaxHealth() * 4 / 100;
+                        CastCustomSpell(this, 34299, &basepoints, NULL, NULL, true);
+                        if (triggeredByAura->GetCasterGUID() != GetGUID())
+                            break;
+                        // Mana Part
+                        int32 bp = GetMaxPower(POWER_MANA) * 8 / 100;
+                        CastCustomSpell(this, 68285, &bp, NULL, NULL, true);
+                        player->AddSpellCooldown(34299, 0, time(NULL) + 6);
                         break;
-                    // Mana Part
-                    int32 bp = GetMaxPower(POWER_MANA) * 8 / 100;
-                    CastCustomSpell(this, 68285, &bp, NULL, NULL, true);
-                    ToPlayer()->AddSpellCooldown(34299, 0, time(NULL) + 6);
-                    break;
+                    }
                 }
                 // Healing Touch (Dreamwalker Raiment set)
                 case 28719:
@@ -6198,13 +6240,15 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                     if (!procSpell || !((procSpell->AttributesEx & SPELL_ATTR1_REQ_COMBO_POINTS1) && (procSpell->AttributesEx & SPELL_ATTR1_REQ_COMBO_POINTS2)))
                         return false;
 
-                    int32 NewCooldown = GetAura(dummySpell->Id)->GetEffect(EFFECT_0)->GetAmount() / 1000 * ToPlayer()->GetComboPoints();
-
-                    for (uint8 i = 0; i < 3; i++)
+                    if (Player* player = ToPlayer())
                     {
-                        int32 spell = 0;
-                        switch (i)
+                        int32 NewCooldown = GetAura(dummySpell->Id)->GetEffect(EFFECT_0)->GetAmount() / 1000 * player->GetComboPoints();
+
+                        for (uint8 i = 0; i < 3; i++)
                         {
+                            int32 spell = 0;
+                            switch (i)
+                            {
                             case 0:
                                 spell = 13750;
                                 break;
@@ -6214,20 +6258,22 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                             case 2:
                                 spell = 2983;
                                 break;
+                            }
+
+                            int32 newCooldownDelay = player->GetSpellCooldownDelay(spell);
+                            if (newCooldownDelay <= NewCooldown)
+                                newCooldownDelay = 0;
+                            else
+                                newCooldownDelay -= NewCooldown;
+
+                            player->AddSpellCooldown(spell, 0, uint32(time(NULL) + newCooldownDelay));
+                            WorldPacket data(SMSG_MODIFY_COOLDOWN, 4 + 8 + 4);
+                            data << uint32(spell);
+                            data << uint64(GetGUID());
+                            data << int32(-(NewCooldown * 1000));
+                            player->GetSession()->SendPacket(&data);
                         }
 
-                        int32 newCooldownDelay = ToPlayer()->GetSpellCooldownDelay(spell);
-                        if (newCooldownDelay <= NewCooldown)
-                            newCooldownDelay = 0;
-                        else
-                            newCooldownDelay -= NewCooldown;
-
-                        ToPlayer()->AddSpellCooldown(spell, 0, uint32(time(NULL) + newCooldownDelay));
-                        WorldPacket data(SMSG_MODIFY_COOLDOWN, 4 + 8 + 4);
-                        data << uint32(spell);
-                        data << uint64(GetGUID());
-                        data << int32(-(NewCooldown * 1000));
-                        ToPlayer()->GetSession()->SendPacket(&data);
                     }
                 }
                 case 2983: // Bandits Guile
@@ -6299,11 +6345,12 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                     {
                         if (AuraEffect* aurEff = GetDummyAuraEffect(SPELLFAMILY_HUNTER, 355, 0))
                             if (roll_chance_i(aurEff->GetAmount()))
-                            {
-                                if (ToPlayer()->HasSpellCooldown(56453))
-                                    ToPlayer()->RemoveSpellCooldown(56453);
-                                CastSpell(this,56453,true);
-                            }
+                                if (Player* player = ToPlayer())
+                                {
+                                    if (player->HasSpellCooldown(56453))
+                                        player->RemoveSpellCooldown(56453);
+                                    CastSpell(this,56453,true);
+                                }
                         return true;
                     }
                     return false;
@@ -6313,7 +6360,12 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 {
                   if (!(dummySpell->ProcFlags == 0x000202A8))
                         return false;
-                    if (ToPlayer()->HasSpellCooldown(dummySpell->Id))
+
+                  Player* player = ToPlayer();                  
+                  if (!player)
+                      return false;
+
+                  if (player->HasSpellCooldown(dummySpell->Id))
                         return false;
 
                     int32 CD = 0;
@@ -6323,42 +6375,42 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                     if (procFlag & PROC_FLAG_TAKEN_MELEE_AUTO_ATTACK || procFlag & PROC_FLAG_TAKEN_SPELL_MELEE_DMG_CLASS)
                     {
                         bp = 2;
-                        CD = ToPlayer()->GetSpellCooldownDelay(781);
+                        CD = player->GetSpellCooldownDelay(781);
                         if (CD < bp)
                             CD = 0;
                         else
                             CD -= bp;
 
-                        ToPlayer()->AddSpellCooldown(781, 0, time(NULL) + CD);
+                        player->AddSpellCooldown(781, 0, time(NULL) + CD);
 
-                        ToPlayer()->AddSpellCooldown(dummySpell->Id, 0, time(NULL) + 2);
+                        player->AddSpellCooldown(dummySpell->Id, 0, time(NULL) + 2);
 
                         WorldPacket data(SMSG_MODIFY_COOLDOWN, 4+8+4);
                         data << uint32(781);                          // Spell ID
                         data << uint64(GetGUID());                      // Player GUID
                         data << int32(-bp * IN_MILLISECONDS);   // Cooldown mod in
-                        ToPlayer()->GetSession()->SendPacket(&data);
+                        player->GetSession()->SendPacket(&data);
                         return true;
                     }
                     //Deterrence
                     if (procFlag & PROC_FLAG_TAKEN_RANGED_AUTO_ATTACK || procFlag & PROC_FLAG_TAKEN_SPELL_RANGED_DMG_CLASS || procFlag & PROC_FLAG_TAKEN_SPELL_MAGIC_DMG_CLASS_NEG)
                     {
                         bp = 4;
-                        CD = ToPlayer()->GetSpellCooldownDelay(19263);
+                        CD = player->GetSpellCooldownDelay(19263);
                         if (CD < bp)
                             CD = 0;
                         else
                             CD -= bp;
 
-                        ToPlayer()->AddSpellCooldown(19263, 0, time(NULL) + CD);
+                        player->AddSpellCooldown(19263, 0, time(NULL) + CD);
 
-                        ToPlayer()->AddSpellCooldown(dummySpell->Id, 0, time(NULL) + 2);
+                        player->AddSpellCooldown(dummySpell->Id, 0, time(NULL) + 2);
 
                         WorldPacket data(SMSG_MODIFY_COOLDOWN, 4+8+4);
                         data << uint32(19263);                         // Spell ID
                         data << uint64(GetGUID());                     // Player GUID
                         data << int32(-bp * IN_MILLISECONDS);          // Cooldown mod in
-                        ToPlayer()->GetSession()->SendPacket(&data);
+                        player->GetSession()->SendPacket(&data);
                         return true;
                     }
                     return false;
@@ -6370,8 +6422,9 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 uint32 basepoints = 0;
 
                 //One With Nature
-                if (AuraEffect* aurEff = ToPlayer()->GetDummyAuraEffect(SPELLFAMILY_HUNTER, 5080, 1))
-                    basepoints = aurEff->GetSpellInfo()->Effects[1].BasePoints;
+                if (Player* player = ToPlayer())
+                    if (AuraEffect* aurEff = player->GetDummyAuraEffect(SPELLFAMILY_HUNTER, 5080, 1))
+                        basepoints = aurEff->GetSpellInfo()->Effects[1].BasePoints;
 
                 target = this;
                 basepoints0 = triggeredByAura->GetSpellInfo()->Effects[0].BasePoints + basepoints;
@@ -6787,24 +6840,23 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 {
                     // Lightning Bolt & Chain Lightning
                     if (procSpell->SpellFamilyFlags[0] & 0x3)
-                    {
-                        if (ToPlayer()->HasSpellCooldown(16166))
-                        {
-                            uint32 newCooldownDelay = ToPlayer()->GetSpellCooldownDelay(16166);
-                            if (newCooldownDelay < 3)
-                                newCooldownDelay = 0;
-                            else
-                                newCooldownDelay -= 2;
-                            ToPlayer()->AddSpellCooldown(16166, 0, uint32(time(NULL) + newCooldownDelay));
+                        if (Player* player = ToPlayer())
+                            if (player->HasSpellCooldown(16166))
+                            {
+                                uint32 newCooldownDelay = player->GetSpellCooldownDelay(16166);
+                                if (newCooldownDelay < 3)
+                                    newCooldownDelay = 0;
+                                else
+                                    newCooldownDelay -= 2;
+                                player->AddSpellCooldown(16166, 0, uint32(time(NULL) + newCooldownDelay));
 
-                            WorldPacket data(SMSG_MODIFY_COOLDOWN, 4+8+4);
-                            data << uint32(16166);                  // Spell ID
-                            data << uint64(GetGUID());              // Player GUID
-                            data << int32(-2000);                   // Cooldown mod in milliseconds
-                            ToPlayer()->GetSession()->SendPacket(&data);
-                            return true;
-                        }
-                    }
+                                WorldPacket data(SMSG_MODIFY_COOLDOWN, 4+8+4);
+                                data << uint32(16166);                  // Spell ID
+                                data << uint64(GetGUID());              // Player GUID
+                                data << int32(-2000);                   // Cooldown mod in milliseconds
+                                player->GetSession()->SendPacket(&data);
+                                return true;
+                            }
                     return false;
                 }
                 // Item - Shaman T10 Elemental 4P Bonus
@@ -6956,19 +7008,23 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
                 }
                 else
                 {
-                    uint32 cooldownrunes[MAX_RUNES];
-                    uint8 runescount = 0;
-                    for (uint32 j = 0; j < MAX_RUNES; ++j)
-                        if (ToPlayer()->GetRuneCooldown(j))
+                    if (Player* player = ToPlayer())
+                    {
+                        uint32 cooldownrunes[MAX_RUNES];
+                        uint8 runescount = 0;
+                        for (uint32 j = 0; j < MAX_RUNES; ++j)
+                            if (player->GetRuneCooldown(j))
+                            {
+                                cooldownrunes[runescount] = j;
+                                runescount++;
+                            }
+
+                        if (runescount > 0)
                         {
-                            cooldownrunes[runescount] = j;
-                            runescount++;
+                            uint8 rndrune = urand(0, runescount - 1);
+                            player->SetRuneCooldown(cooldownrunes[rndrune], 0);
                         }
 
-                    if (runescount > 0)
-                    {
-                        uint8 rndrune = urand(0, runescount - 1);
-                        ToPlayer()->SetRuneCooldown(cooldownrunes[rndrune], 0);
                     }
                 }
                 break;
@@ -7077,44 +7133,47 @@ bool Unit::HandleDummyAuraProc(Unit* victim, uint32 damage, AuraEffect* triggere
     //Strikes of Opportunity - Warrior mastery
     if (dummySpell->Id == 76838)
         if (roll_chance_i(GetAura(76838)->GetEffect(0)->GetAmount()))
-            if (!ToPlayer()->HasSpellCooldown(76858))
-            {
-                CastSpell(victim, 76858, true);
-                ToPlayer()->AddSpellCooldown(76858, 0, time(NULL) + 2);
-            }
+            if (Player* player = ToPlayer())
+                if (!player->HasSpellCooldown(76858))
+                {
+                    CastSpell(victim, 76858, true);
+                    player->AddSpellCooldown(76858, 0, time(NULL) + 2);
+                }
 
     //Main Gauche - Rogue mastery
     if (dummySpell->Id == 76806)
         if (roll_chance_i(GetAura(76806)->GetEffect(0)->GetAmount())) 
-            if (!ToPlayer()->HasSpellCooldown(86392))
-            {
-                // Combat Potency
-                if (GetAuraEffect(SPELL_AURA_PROC_TRIGGER_SPELL, SPELLFAMILY_ROGUE, 2260, EFFECT_0))
+            if (Player* player = ToPlayer())
+                if (!player->HasSpellCooldown(86392))
                 {
-                    int32 trigger = 0;
-                    if (HasAura(35541))
-                        trigger = 35542;
-                    else if (HasAura(35550))
-                        trigger = 35545;
-                    else if (HasAura(35551))
-                        trigger = 35546;
+                    // Combat Potency
+                    if (GetAuraEffect(SPELL_AURA_PROC_TRIGGER_SPELL, SPELLFAMILY_ROGUE, 2260, EFFECT_0))
+                    {
+                        int32 trigger = 0;
+                        if (HasAura(35541))
+                            trigger = 35542;
+                        else if (HasAura(35550))
+                            trigger = 35545;
+                        else if (HasAura(35551))
+                            trigger = 35546;
 
-                    if (trigger != 0)
-                        CastSpell(this, trigger, true);
+                        if (trigger != 0)
+                            CastSpell(this, trigger, true);
+                    }
+
+                    CastSpell(victim, 86392, true);
+                    player->AddSpellCooldown(86392, 0, time(NULL) + 2);
                 }
-
-                CastSpell(victim, 86392, true);
-                ToPlayer()->AddSpellCooldown(86392, 0, time(NULL) + 2);
-            }
 
     // Wild Quiver
     if (dummySpell->Id == 76659)
         if (roll_chance_i(GetAura(76659)->GetEffect(0)->GetAmount()))
-            if (!ToPlayer()->HasSpellCooldown(76663))
-            {
-                CastSpell(victim, 76663, true);
-                ToPlayer()->AddSpellCooldown(76663, 0, time(NULL) + 2);
-            }
+            if (Player* player = ToPlayer())
+                if (!player->HasSpellCooldown(76663))
+                {
+                    CastSpell(victim, 76663, true);
+                    player->AddSpellCooldown(76663, 0, time(NULL) + 2);
+                }
 
     // if not handled by custom case, get triggered spell from dummySpell proto
     if (!triggered_spell_id)
@@ -7449,7 +7508,7 @@ bool Unit::HandleAuraProc(Unit* victim, uint32 damage, Aura* triggeredByAura, Sp
                     if (player->getClass() != CLASS_DEATH_KNIGHT)
                         return false;
 
-                    RuneType rune = ToPlayer()->GetLastUsedRune();
+                    RuneType rune = player->GetLastUsedRune();
                     // can't proc from death rune use
                     if (rune == RUNE_DEATH)
                         return false;
@@ -7513,8 +7572,9 @@ bool Unit::HandleAuraProc(Unit* victim, uint32 damage, Aura* triggeredByAura, Sp
                 case 49588:
                 case 49589:
                 {
-                    if (ToPlayer()->HasSpellCooldown(49576))
-                        ToPlayer()->RemoveSpellCooldown(49576,true);
+                    if (Player* player = ToPlayer())
+                        if (player->HasSpellCooldown(49576))
+                            player->RemoveSpellCooldown(49576, true);
                     break;
                 }
                 // Hungering Cold
@@ -7551,13 +7611,17 @@ bool Unit::HandleAuraProc(Unit* victim, uint32 damage, Aura* triggeredByAura, Sp
             case 33881:
             case 33882:
                 {
-                    if (!roll_chance_i(triggeredByAura->GetEffect(EFFECT_0)->GetAmount()) || HealthAbovePct(50) || ToPlayer()->HasSpellCooldown(45281))
-                        return false;
+                    if (Player* player = ToPlayer())
+                    {
+                        if (!roll_chance_i(triggeredByAura->GetEffect(EFFECT_0)->GetAmount()) || HealthAbovePct(50) || player->HasSpellCooldown(45281))
+                            return false;
 
-                    CastSpell(this, 45281, true);
-                    CastSpell(this, 774, true);
-                    ToPlayer()->AddSpellCooldown(45281, 0, time(NULL) + 12);
-                    return true;
+                        CastSpell(this, 45281, true);
+                        CastSpell(this, 774, true);
+                        player->AddSpellCooldown(45281, 0, time(NULL) + 12);
+                        return true;
+
+                    }
                 }
             }
             break;
@@ -7592,22 +7656,23 @@ bool Unit::HandleAuraProc(Unit* victim, uint32 damage, Aura* triggeredByAura, Sp
         {
             // Impending Doom
             if (dummySpell->SpellIconID == 195)
-            {
-                if (!ToPlayer()->HasSpellCooldown(47241))
-                    return false;
+                if (Player* player = ToPlayer())
+                {
+                    if (!player->HasSpellCooldown(47241))
+                        return false;
 
-                int32 BP = dummySpell->Effects[EFFECT_1].BasePoints;
-                int32 CD = ToPlayer()->GetSpellCooldownDelay(47241) - BP;
+                    int32 BP = dummySpell->Effects[EFFECT_1].BasePoints;
+                    int32 CD = player->GetSpellCooldownDelay(47241) - BP;
 
-                ToPlayer()->AddSpellCooldown(47241, 0, time(NULL) + CD);
+                    player->AddSpellCooldown(47241, 0, time(NULL) + CD);
 
-                WorldPacket data(SMSG_MODIFY_COOLDOWN, 4+8+4);
-                data << uint32(47241);                          // Spell ID
-                data << uint64(GetGUID());                      // Player GUID
-                data << int32(-BP * IN_MILLISECONDS);           // Cooldown mod in
-                ToPlayer()->GetSession()->SendPacket(&data);
-                return true;
-            }
+                    WorldPacket data(SMSG_MODIFY_COOLDOWN, 4+8+4);
+                    data << uint32(47241);                          // Spell ID
+                    data << uint64(GetGUID());                      // Player GUID
+                    data << int32(-BP * IN_MILLISECONDS);           // Cooldown mod in
+                    player->GetSession()->SendPacket(&data);
+                    return true;
+                }
             break;
         }
     }
@@ -8236,12 +8301,13 @@ bool Unit::HandleProcTriggerSpell(Unit* victim, uint32 damage, AuraEffect* trigg
         case 96268:
         {
             uint8 unholy = 0;
-            for (uint32 i = 0; i < MAX_RUNES; ++i)
-            {
-                RuneType rune = ToPlayer()->GetCurrentRune(i);
-                if (ToPlayer()->GetRuneCooldown(i) && rune == RUNE_UNHOLY)
-                    ++unholy;
-            }
+            if (Player* player = ToPlayer())
+                for (uint32 i = 0; i < MAX_RUNES; ++i)
+                {
+                    RuneType rune = player->GetCurrentRune(i);
+                    if (player->GetRuneCooldown(i) && rune == RUNE_UNHOLY)
+                        ++unholy;
+                }
 
             if (unholy < 2 || !HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED))
                 return false;
@@ -8282,11 +8348,12 @@ bool Unit::HandleProcTriggerSpell(Unit* victim, uint32 damage, AuraEffect* trigg
             if (HealthBelowPct(19) || (!HealthBelowPctDamaged(20, damage))) return false;
             else
             {
-                if (!ToPlayer()->HasSpellCooldown(trigger_spell_id))
-                {
-                    AddAura(trigger_spell_id, this);
-                    ToPlayer()->AddSpellCooldown(trigger_spell_id, 0, time(NULL) + 120);
-                }
+                if (Player* player = ToPlayer())
+                    if (!player->HasSpellCooldown(trigger_spell_id))
+                    {
+                        AddAura(trigger_spell_id, this);
+                        player->AddSpellCooldown(trigger_spell_id, 0, time(NULL) + 120);
+                    }
             }
             break;
         // Tower of Radiance
@@ -8305,8 +8372,9 @@ bool Unit::HandleProcTriggerSpell(Unit* victim, uint32 damage, AuraEffect* trigg
             if (!procSpell || (procSpell->Id != 53595 && procSpell->Id != 35395))
                 return false;
 
-            if (ToPlayer()->HasSpell(31935))
-                ToPlayer()->RemoveSpellCooldown(31935,true);
+            if (Player* player = ToPlayer())
+                if (player->HasSpell(31935))
+                    player->RemoveSpellCooldown(31935, true);
             break;
         }
         // Auras which should proc on area aura source (caster in this case):
@@ -8356,7 +8424,10 @@ bool Unit::HandleProcTriggerSpell(Unit* victim, uint32 damage, AuraEffect* trigg
         {
             bool proc = false;
             if (damage)
-                proc = damage >= ToPlayer()->CountPctFromMaxHealth(10);
+            {
+                if (Unit* unit = ToUnit())
+                    proc = damage >= unit->CountPctFromMaxHealth(10);
+            }
             if (trigger_spell_id == 89007)
             {
                 if (proc || (procSpell && procSpell->Id == 32409)) 
@@ -10675,10 +10746,13 @@ void Unit::SpellReceivedCriticalValue(Unit* victim, const SpellInfo* spellProto)
            if (spellProto->Id == 116)
            {
                // Piercing Chill
-               if (HasAura(83156))
-                  victim->CastSpell(SelectNearbyTarget(victim), 83154, true);
-               else if (HasAura(83157))
-                  victim->CastSpell(SelectNearbyTarget(victim), 99560, true);
+               if (Unit* unit = SelectNearbyTarget(victim))
+               {
+                   if (HasAura(83156))
+                       victim->CastSpell(unit, 83154, true);
+                   else if (HasAura(83157))
+                       victim->CastSpell(unit, 99560, true);
+               }
            }
            break;
        case SPELLFAMILY_HUNTER:
@@ -11555,7 +11629,7 @@ void Unit::Mount(uint32 mount, uint32 VehicleId, uint32 creatureEntry)
         Pet* pet = player->GetPet();
         if (pet)
         {
-            Battleground* bg = ToPlayer()->GetBattleground();
+            Battleground* bg = player->GetBattleground();
             // don't unsummon pet in arena but SetFlag UNIT_FLAG_STUNNED to disable pet's interface
             if (bg && bg->isArena())
                 pet->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_STUNNED);
@@ -15559,7 +15633,8 @@ void Unit::Kill(Unit* victim, bool durabilityLoss)
                     // until the players leave the instance
                     time_t resettime = creature->GetRespawnTimeEx() + 2 * HOUR;
                     if (InstanceSave* save = sInstanceSaveMgr->GetInstanceSave(creature->GetInstanceId()))
-                        if (save->GetResetTime() < resettime) save->SetResetTime(resettime);
+                        if (save->GetResetTime() < resettime) 
+                            save->SetResetTime(resettime);
                 }
             }
         }
@@ -18231,11 +18306,6 @@ bool Unit::SetWalk(bool enable)
     return true;
 }
 
-bool Unit::SetRun(bool enable)
-{
-    return SetWalk(!enable);
-}
-
 bool Unit::SetDisableGravity(bool disable, bool packetOnly /*= false*/)
 {
     if (!packetOnly)
@@ -18697,4 +18767,85 @@ void Unit::ResetHealingDoneInPastSecs (uint32 secs)
 
     for (uint32 i = 0; i < secs; i++)
         m_heal_done[i] = 0;
+}
+
+void Unit::Talk(std::string const& text, ChatMsg msgType, Language language, float textRange, WorldObject const* target)
+{
+    Trinity::CustomChatTextBuilder builder(this, msgType, text, language, target);
+    Trinity::LocalizedPacketDo<Trinity::CustomChatTextBuilder> localizer(builder);
+    Trinity::PlayerDistWorker<Trinity::LocalizedPacketDo<Trinity::CustomChatTextBuilder> > worker(this, textRange, localizer);
+    VisitNearbyWorldObject(textRange, worker);
+}
+
+void Unit::Say(std::string const& text, Language language, WorldObject const* target /*= nullptr*/)
+{
+    Talk(text, CHAT_MSG_MONSTER_SAY, language, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_SAY), target);
+}
+
+void Unit::Yell(std::string const& text, Language language, WorldObject const* target /*= nullptr*/)
+{
+    Talk(text, CHAT_MSG_MONSTER_YELL, language, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_YELL), target);
+}
+
+void Unit::TextEmote(std::string const& text, WorldObject const* target /*= nullptr*/, bool isBossEmote /*= false*/)
+{
+    Talk(text, isBossEmote ? CHAT_MSG_RAID_BOSS_EMOTE : CHAT_MSG_MONSTER_EMOTE, LANG_UNIVERSAL, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), target);
+}
+
+void Unit::Whisper(std::string const& text, Language language, Player* target, bool isBossWhisper /*= false*/)
+{
+    if (!target)
+        return;
+
+    LocaleConstant locale = target->GetSession()->GetSessionDbLocaleIndex();
+    WorldPacket data;
+    ChatHandler::BuildChatPacket(data, isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, language, this, target, text, 0, "", locale);
+    target->SendDirectMessage(&data);
+}
+
+void Unit::Talk(uint32 textId, ChatMsg msgType, float textRange, WorldObject const* target)
+{
+    if (!sObjectMgr->GetBroadcastText(textId))
+    {
+        TC_LOG_ERROR("entities.unit", "WorldObject::MonsterText: `broadcast_text` was not %u found", textId);
+        return;
+    }
+
+    Trinity::BroadcastTextBuilder builder(this, msgType, textId, target);
+    Trinity::LocalizedPacketDo<Trinity::BroadcastTextBuilder> localizer(builder);
+    Trinity::PlayerDistWorker<Trinity::LocalizedPacketDo<Trinity::BroadcastTextBuilder> > worker(this, textRange, localizer);
+    VisitNearbyWorldObject(textRange, worker);
+}
+
+void Unit::Say(uint32 textId, WorldObject const* target /*= nullptr*/)
+{
+    Talk(textId, CHAT_MSG_MONSTER_SAY, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_SAY), target);
+}
+
+void Unit::Yell(uint32 textId, WorldObject const* target /*= nullptr*/)
+{
+    Talk(textId, CHAT_MSG_MONSTER_YELL, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_YELL), target);
+}
+
+void Unit::TextEmote(uint32 textId, WorldObject const* target /*= nullptr*/, bool isBossEmote /*= false*/)
+{
+    Talk(textId, isBossEmote ? CHAT_MSG_RAID_BOSS_EMOTE : CHAT_MSG_MONSTER_EMOTE, sWorld->getFloatConfig(CONFIG_LISTEN_RANGE_TEXTEMOTE), target);
+}
+
+void Unit::Whisper(uint32 textId, Player* target, bool isBossWhisper /*= false*/)
+{
+    if (!target)
+        return;
+
+    BroadcastText const* bct = sObjectMgr->GetBroadcastText(textId);
+    if (!bct)
+    {
+        TC_LOG_ERROR("entities.unit", "WorldObject::MonsterWhisper: `broadcast_text` was not %u found", textId);
+        return;
+    }
+
+    LocaleConstant locale = target->GetSession()->GetSessionDbLocaleIndex();
+    WorldPacket data;
+    ChatHandler::BuildChatPacket(data, isBossWhisper ? CHAT_MSG_RAID_BOSS_WHISPER : CHAT_MSG_MONSTER_WHISPER, LANG_UNIVERSAL, this, target, bct->GetText(locale, getGender()), 0, "", locale);
+    target->SendDirectMessage(&data);
 }

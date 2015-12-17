@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -1587,13 +1587,15 @@ void WorldSession::HandleTimeSyncResp(WorldPacket& recvData)
 {
     TC_LOG_DEBUG("network", "CMSG_TIME_SYNC_RESP");
 
-    uint32 counter, clientTicks;
-    recvData >> counter >> clientTicks;
+    uint32 clientCounter, clientTicks;
+    recvData >> clientCounter >> clientTicks;
+    uint32 playerCounter = _player->m_timeSyncQueue.front();
+    int32 tickDiff = abs(int32(playerCounter - clientCounter));
 
-    if (counter != _player->m_timeSyncQueue.front())
+    if (tickDiff > 1)
         TC_LOG_ERROR("network", "Wrong time sync counter from player %s (cheater?)", _player->GetName().c_str());
 
-    TC_LOG_DEBUG("network", "Time sync received: counter %u, client ticks %u, time since last sync %u", counter, clientTicks, clientTicks - _player->m_timeSyncClient);
+    TC_LOG_DEBUG("network", "Time sync received: counter %u, client ticks %u, time since last sync %u", clientCounter, clientTicks, clientTicks - _player->m_timeSyncClient);
 
     uint32 ourTicks = clientTicks + (getMSTime() - _player->m_timeSyncServer);
 
@@ -1830,7 +1832,7 @@ void WorldSession::HandleReadyForAccountDataTimes(WorldPacket& /*recvData*/)
     SendAccountDataTimes(GLOBAL_CACHE_MASK);
 }
 
-void WorldSession::SendSetPhaseShift(std::set<uint32> const& phaseIds, std::set<uint32> const& terrainswaps)
+void WorldSession::SendSetPhaseShift(std::set<uint32> const& phaseIds, std::set<uint32> const& terrainswaps, std::set<uint32> const& worldMapAreaSwaps)
 {
     ObjectGuid guid = _player->GetGUID();
 
@@ -1847,9 +1849,9 @@ void WorldSession::SendSetPhaseShift(std::set<uint32> const& phaseIds, std::set<
     data.WriteByteSeq(guid[7]);
     data.WriteByteSeq(guid[4]);
 
-    data << uint32(0);
-    //for (uint8 i = 0; i < worldMapAreaCount; ++i)
-    //    data << uint16(0);                    // WorldMapArea.dbc id (controls map display)
+    data << uint32(worldMapAreaSwaps.size()) * 2;
+    for (auto mapSwap : worldMapAreaSwaps)
+        data << uint16(mapSwap);                    // WorldMapArea.dbc id (controls map display)
 
     data.WriteByteSeq(guid[1]);
 

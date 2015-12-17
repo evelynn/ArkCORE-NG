@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -431,6 +431,10 @@ typedef std::map<uint32, time_t> CreatureSpellCooldowns;
 
 #define MAX_VENDOR_ITEMS 150                                // Limitation in 4.x.x item count in SMSG_LIST_INVENTORY
 
+//used for handling non-repeatable random texts
+typedef std::vector<uint8> CreatureTextRepeatIds;
+typedef std::unordered_map<uint8, CreatureTextRepeatIds> CreatureTextRepeatGroup;
+
 class Creature : public Unit, public GridObject<Creature>, public MapObject
 {
     public:
@@ -515,9 +519,9 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
         void UpdateMaxHealth();
         void UpdateMaxPower(Powers power);
         void UpdateAttackPowerAndDamage(bool ranged = false);
-        void CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bool addTotalPct, float& minDamage, float& maxDamage) OVERRIDE;
+        void CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bool addTotalPct, float& minDamage, float& maxDamage) override;
 
-        void SetCanDualWield(bool value) OVERRIDE;
+        void SetCanDualWield(bool value) override;
         int8 GetOriginalEquipmentId() const { return m_originalEquipmentId; }
         uint8 GetCurrentEquipmentId() { return m_equipmentId; }
         void SetCurrentEquipmentId(uint8 id) { m_equipmentId = id; }
@@ -680,6 +684,10 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
         void SetSeerGUID(uint64 guid) { uiSeerGUID = guid; }
         uint64 GetSeerGUID() const { return uiSeerGUID; }
 
+        CreatureTextRepeatIds GetTextRepeatGroup(uint8 textGroup);
+        void SetTextRepeatId(uint8 textGroup, uint8 id);
+        void ClearTextRepeatGroup(uint8 textGroup);
+
         // npc_bot commands
         //misc
             uint32 GetBlockPercent() const;
@@ -790,6 +798,8 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
         bool TriggerJustRespawned;
 
         Spell const* _focusSpell;   ///> Locks the target during spell cast for proper facing
+
+        CreatureTextRepeatGroup m_textRepeat;
 };
 
 class AssistDelayEvent : public BasicEvent

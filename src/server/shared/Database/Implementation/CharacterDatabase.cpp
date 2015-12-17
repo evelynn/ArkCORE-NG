@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -271,22 +271,6 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_PLAYER_CURRENCY, "SELECT currency, week_count, total_count FROM character_currency WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_UPD_PLAYER_CURRENCY, "UPDATE character_currency SET week_count = ?, total_count = ? WHERE guid = ? AND currency = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_REP_PLAYER_CURRENCY, "REPLACE INTO character_currency (guid, currency, week_count, total_count) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
-
-    // Archaeology
-    PrepareStatement(CHAR_SEL_PLAYER_FIND_IDS, "SELECT find1PosX, find2PosX, find3PosX FROM character_archaeology_digsites WHERE guid = ? AND siteId = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_SEL_PLAYER_SITE_IDS, "SELECT siteId FROM character_archaeology_digsites WHERE guid = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_SEL_PLAYER_SITES, "SELECT siteId, mapId, areaId, find1PosX, find1PosY, find2PosX, find2PosY, find3PosX, find3PosY FROM character_archaeology_digsites WHERE guid = ? AND siteId = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_REP_PLAYER_SITES, "REPLACE INTO character_archaeology_digsites (guid, siteId, mapId, areaId, find1PosX, find1PosY, find2PosX, find2PosY, find3PosX, find3PosY) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_DEL_PLAYER_SITES, "DELETE FROM  character_archaeology_digsites WHERE guid = ? AND siteId = ?", CONNECTION_ASYNC);
-
-    PrepareStatement(CHAR_SEL_PLAYER_PROJECT, "SELECT projectEntry, branchId FROM character_archaeology_projects WHERE guid = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_INS_PLAYER_PROJECT, "INSERT INTO character_archaeology_projects (guid, branchId, projectEntry) VALUES (?,?,?)", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_DEL_PLAYER_PROJECT, "DELETE FROM character_archaeology_projects WHERE guid = ? AND projectEntry = ?", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_SEL_PLAYER_COMPLETED_PROJECT, "SELECT projectId FROM character_completed_projects WHERE guid = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_INS_PLAYER_COMPLETED_PROJECT, "INSERT INTO character_completed_projects (guid, projectId, completionCount, completionTime) VALUES (?, ?, ?, ?)", CONNECTION_ASYNC);
-    PrepareStatement(CHAR_SEL_PLAYER_COMPLETED_PROJECT_COUNT, "SELECT completionCount FROM character_completed_projects WHERE guid = ? AND projectId = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_SEL_PLAYER_COMPLETED_PROJECT_TIME, "SELECT completionTime FROM character_completed_projects WHERE guid = ? AND projectId = ?", CONNECTION_SYNCH);
-    PrepareStatement(CHAR_UPD_PLAYER_COMPLETED_PROJECT_COUNT, "UPDATE character_completed_projects SET completionCount = ? WHERE guid = ? AND projectId = ?", CONNECTION_ASYNC);
 
     // Account data
     PrepareStatement(CHAR_SEL_ACCOUNT_DATA, "SELECT type, time, data FROM account_data WHERE accountId = ?", CONNECTION_SYNCH);
@@ -658,6 +642,7 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_NPCBOTS, "SELECT entry, race, class, istank, equipMhEx, equipOhEx, equipRhEx, "
         "equipHead, equipShoulders, equipChest, equipWaist, equipLegs, equipFeet, equipWrist, equipHands, equipBack, equipBody, equipFinger1, equipFinger2, equipTrinket1, equipTrinket2, equipNeck FROM character_npcbot WHERE owner = ? AND active = 1", CONNECTION_SYNCH);
     PrepareStatement(CHAR_DEL_NPCBOTS, "DELETE FROM character_npcbot WHERE owner = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_NPCBOT, "DELETE FROM character_npcbot WHERE owner = ? AND entry=?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_INS_NPCBOT, "REPLACE INTO character_npcbot (owner, entry, race, class, istank, equipMhEx, equipOhEx, equipRhEx, "
         "equipHead, equipShoulders, equipChest, equipWaist, equipLegs, equipFeet, equipWrist, equipHands, equipBack, equipBody, equipFinger1, equipFinger2, equipTrinket1, equipTrinket2, equipNeck, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", CONNECTION_ASYNC);
     PrepareStatement(CHAR_SEL_MAINTANK, "SELECT memberGuid, memberFlags FROM group_member WHERE guid = ?", CONNECTION_SYNCH);
@@ -668,4 +653,22 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_SEL_NPCBOT_EQUIP, "SELECT equipMhEx, equipOhEx, equipRhEx, "
         "equipHead, equipShoulders, equipChest, equipWaist, equipLegs, equipFeet, equipWrist, equipHands, equipBack, equipBody, equipFinger1, equipFinger2, equipTrinket1, equipTrinket2, equipNeck FROM character_npcbot WHERE owner = ? AND entry = ?", CONNECTION_SYNCH);
 
+    // Archaeology
+    PrepareStatement(CHAR_SEL_PLAYER_DIGGING_ALL, "SELECT slot, entry, counter_digsite, time_digged, point1, count1, point2, count2, point3, count3 FROM character_archaeology_digsite WHERE guid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_DEL_PLAYER_DIGGING, "DELETE FROM character_archaeology_digsite WHERE slot = ? AND guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_PLAYER_DIGGING_ALL, "DELETE FROM character_archaeology_digsite WHERE guid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_PLAYER_DIGGING, "REPLACE INTO character_archaeology_digsite (slot, guid, entry, counter_digsite, time_digged, point1, count1, point2, count2, point3, count3) VALUES (?,?,?,?,?,?,?,?,?,?,?)", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_INS_PLAYER_DIGGING, "INSERT INTO character_archaeology_digsite (slot, guid, entry, counter_digsite, time_digged, point1, count1, point2, count2, point3, count3) VALUES (?,?,?,?,?,?,?,?,?,?,?)", CONNECTION_ASYNC);
+
+    PrepareStatement(CHAR_SEL_PLAYER_CURRENT_PROJECT, "SELECT branchId, projectId FROM character_archaeology_current WHERE guid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_DEL_PLAYER_CURRENT_PROJECT, "DELETE FROM character_archaeology_current WHERE guid = ? AND branchId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_PLAYER_CURRENT_PROJECT2, "DELETE FROM character_archaeology_current WHERE guid = ? AND branchId = ? AND projectId = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_INS_PLAYER_CURRENT_PROJECT, "INSERT INTO character_archaeology_current (guid, branchId, projectId) VALUES (?,?,?)", CONNECTION_ASYNC);
+
+    PrepareStatement(CHAR_SEL_PLAYER_COMPLETED_PROJECT, "SELECT projectId, counter_completed, time_first, time_last FROM character_archaeology_completed WHERE guid = ?", CONNECTION_SYNCH);
+    PrepareStatement(CHAR_REP_PLAYER_COMPLETED_PROJECT, "REPLACE INTO character_archaeology_completed (guid, projectId, counter_completed, time_first, time_last) values (?,?,?,?,?)", CONNECTION_ASYNC);
+
+    PrepareStatement(CHAR_DEL_PLAYER_SURVEY_DATA, "DELETE FROM character_archaeology_digsite WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_PLAYER_CURRENT_DATA, "DELETE FROM character_archaeology_current WHERE guid = ?", CONNECTION_ASYNC);
+    PrepareStatement(CHAR_DEL_PLAYER_COMPLETE_DATA, "DELETE FROM character_archaeology_completed WHERE guid = ?", CONNECTION_ASYNC);
 }

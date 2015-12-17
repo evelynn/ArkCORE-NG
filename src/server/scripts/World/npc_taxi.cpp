@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2006-2009 ScriptDev2 <https://scriptdev2.svn.sourceforge.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -28,8 +28,15 @@ EndScriptData
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
+#include "ScriptedEscortAI.h"
+#include "GameObjectAI.h"
+#include "GameObject.h"
 #include "Player.h"
-#include "WorldSession.h"
+#include "Vehicle.h"
+#include "VehicleDefines.h"
+#include "Transport.h"
+#include "TransportMgr.h"
+
 
 #define GOSSIP_SUSURRUS         "I am ready."
 #define GOSSIP_NETHER_DRAKE     "I'm ready to fly! Take me up, dragon!"
@@ -64,7 +71,7 @@ class npc_taxi : public CreatureScript
 public:
     npc_taxi() : CreatureScript("npc_taxi") { }
 
-    bool OnGossipHello(Player* player, Creature* creature) OVERRIDE
+    bool OnGossipHello(Player* player, Creature* creature) override
     {
         if (creature->IsQuestGiver())
             player->PrepareQuestMenu(creature->GetGUID());
@@ -173,7 +180,7 @@ public:
         return true;
     }
 
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) OVERRIDE
+    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
     {
         player->PlayerTalkClass->ClearMenus();
         switch (action)
@@ -307,7 +314,69 @@ public:
     }
 };
 
+
+class go_teleporter : public GameObjectScript
+{
+public:
+    go_teleporter() : GameObjectScript("go_teleporter") { }
+
+    enum eTeleporter
+    {
+        EVENT_CHECK_FOR_PLAYER = 1,
+    };
+
+    struct go_teleporterAI : public GameObjectAI
+    {
+        go_teleporterAI(GameObject* go) : GameObjectAI(go) { }
+
+        EventMap m_events;
+
+        uint32 m_zone, m_area;
+
+        void Reset() override
+        {
+            m_events.Reset();
+            m_events.ScheduleEvent(EVENT_CHECK_FOR_PLAYER, 1000);
+            m_zone = 0;
+            m_area = 0;
+        }
+
+        void UpdateAI(uint32 diff) override
+        {
+            m_events.Update(diff);
+            while (uint32 eventId = m_events.ExecuteEvent())
+            {
+                switch (eventId)
+                {
+                    case EVENT_CHECK_FOR_PLAYER:
+                    {
+                        go->GetZoneAndAreaId(m_zone, m_area);
+                            switch (m_area)
+                            {
+                                case 5050:
+                                {
+                                    if (Player* player = go->FindNearestPlayer(3.0f))
+                                        player->TeleportTo(1, 4554.59f, -2602.04f, 1124.29f, 8.46322f);
+
+                                    break;
+                                }
+                        }
+                        m_events.ScheduleEvent(EVENT_CHECK_FOR_PLAYER, 1000);
+                        break;
+                    }
+                }
+            }
+        }
+    };
+
+    GameObjectAI* GetAI(GameObject* go) const override
+    {
+        return new go_teleporterAI(go);
+    }
+};
+
 void AddSC_npc_taxi()
 {
     new npc_taxi;
+    new go_teleporter();
 }

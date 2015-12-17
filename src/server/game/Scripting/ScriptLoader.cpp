@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -41,6 +41,7 @@ void AddSC_quest_spell_scripts();
 void AddSC_item_spell_scripts();
 void AddSC_example_spell_scripts();
 void AddSC_holiday_spell_scripts();
+void AddSC_guild_spell_scripts();
 
 void AddSC_SmartSCripts();
 
@@ -179,6 +180,12 @@ void AddSC_instance_blackwing_lair();
 void AddSC_deadmines();                      //Deadmines
 void AddSC_instance_deadmines();
 void AddSC_boss_mr_smite();
+void AddSC_boss_admiral_ripsnarl();
+void AddSC_boss_captain_cookie();
+void AddSC_boss_foo_reaper_5000();
+void AddSC_boss_glubtok();
+void AddSC_boss_helix_gearbreaker();
+void AddSC_boss_vanessa_van_cleef();
 void AddSC_gnomeregan();                     //Gnomeregan
 void AddSC_instance_gnomeregan();
 void AddSC_grim_batol();                     //Grim Batol
@@ -216,7 +223,6 @@ void AddSC_boss_sulfuron();
 void AddSC_boss_majordomo();
 void AddSC_boss_ragnaros();
 void AddSC_instance_molten_core();
-void AddSC_instance_ragefire_chasm();        //Ragefire Chasm
 void AddSC_the_scarlet_enclave();            //Scarlet Enclave
 void AddSC_the_scarlet_enclave_c1();
 void AddSC_the_scarlet_enclave_c2();
@@ -277,8 +283,14 @@ void AddSC_boss_eredar_twins();
 void AddSC_boss_muru();
 void AddSC_boss_kiljaeden();
 void AddSC_sunwell_plateau();
-void AddSC_boss_archaedas();                 //Uldaman
+void AddSC_boss_revelosh();                  //Uldaman
+void AddSC_boss_the_lost_dwarves();
 void AddSC_boss_ironaya();
+void AddSC_boss_obsidian_sentinel();
+void AddSC_boss_ancient_stone_keeper();
+void AddSC_boss_galgann_firehammer();
+void AddSC_boss_grimlok();
+void AddSC_boss_archaedas();
 void AddSC_uldaman();
 void AddSC_instance_uldaman();
 void AddSC_instance_the_stockade();          //The Stockade
@@ -306,7 +318,9 @@ void AddSC_boss_venoxis();
 void AddSC_boss_wushoolay();
 void AddSC_boss_zanzil();
 void AddSC_instance_zulgurub();
-void AddSC_gilneas_duskhaven();
+void AddSC_zone_gilneas_duskhaven();
+void AddSC_zone_gilneas_city();
+void AddSC_zone_gilneas_city2();
 
 //void AddSC_alterac_mountains();
 void AddSC_arathi_highlands();
@@ -318,7 +332,6 @@ void AddSC_duskwood();
 void AddSC_eastern_plaguelands();
 void AddSC_elwynn_forest();
 void AddSC_eversong_woods();
-void AddSC_gilneas_city();
 void AddSC_ghostlands();
 void AddSC_hinterlands();
 void AddSC_ironforge();
@@ -335,8 +348,6 @@ void AddSC_undercity();
 void AddSC_western_plaguelands();
 void AddSC_westfall();
 void AddSC_wetlands();
-// Gilneas old
-void AddSC_gilneas();
 
 // Kalimdor
 void AddSC_blackfathom_deeps();              //Blackfathom Depths
@@ -348,6 +359,7 @@ void AddSC_hyjal();                          //CoT Battle for Mt. Hyjal
 void AddSC_boss_archimonde();
 void AddSC_instance_mount_hyjal();
 void AddSC_hyjal_trash();
+void AddSC_zone_hyjal();
 void AddSC_boss_rage_winterchill();
 void AddSC_boss_anetheron();
 void AddSC_boss_kazrogal();
@@ -409,6 +421,26 @@ void AddSC_elementaires_sdo();
 void AddSC_npc_trash_sdo();
 void AddSC_instance_halls_of_origination();
 void AddSC_instance_dire_maul();             //Dire Maul
+void AddSC_dire_maul();
+void AddSC_gordoks_commons();
+void AddSC_capital_gardens();
+void AddSC_warpwood_quarter();
+void AddSC_boss_alzzin_the_wildshaper();
+void AddSC_boss_captain_kromcrush();
+void AddSC_boss_chorush_the_observer();
+void AddSC_boss_guard_fengus();
+void AddSC_boss_guard_moldar();
+void AddSC_boss_guard_slipkik();
+void AddSC_boss_hydrospawn();
+void AddSC_boss_illyanna_ravenoak();
+void AddSC_boss_immolthar();
+void AddSC_boss_king_gordok();
+void AddSC_boss_lethtendris();
+void AddSC_boss_magister_kalendris();
+void AddSC_boss_prince_tortheldrin();
+void AddSC_boss_stomper_kreeg();
+void AddSC_boss_tendris_warpwood();
+void AddSC_boss_zevrim_thornhoof();
 void AddSC_lost_city_of_the_tolvir();        //Lost City of the Tol'Vir
 void AddSC_boss_general_husam();
 void AddSC_boss_lockmaw_augh();
@@ -462,6 +494,12 @@ void AddSC_instance_wailing_caverns();
 void AddSC_boss_zum_rah();                   //Zul'Farrak
 void AddSC_zulfarrak();
 void AddSC_instance_zulfarrak();
+void AddSC_instance_ragefire_chasm();       // Ragefire Chasm
+void AddSC_ragefire_chasm();
+void AddSC_boss_taragaman_the_hungerer();
+void AddSC_boss_oggleflint();
+void AddSC_boss_jergosh_the_invoker();
+void AddSC_boss_bazzalan();
 
 void AddSC_ashenvale();
 void AddSC_azshara();
@@ -485,6 +523,7 @@ void AddSC_thousand_needles();
 void AddSC_thunder_bluff();
 void AddSC_ungoro_crater();
 void AddSC_winterspring();
+void AddSC_zone_northern_barrens();
 
 // Northrend
 void AddSC_boss_slad_ran();
@@ -870,6 +909,7 @@ void AddSpellScripts()
     AddSC_item_spell_scripts();
     AddSC_example_spell_scripts();
     AddSC_holiday_spell_scripts();
+    AddSC_guild_spell_scripts();
 }
 
 void AddCommandScripts()
@@ -1012,6 +1052,12 @@ void AddEasternKingdomsScripts()
     AddSC_deadmines();                      //Deadmines
     AddSC_boss_mr_smite();
     AddSC_instance_deadmines();
+    AddSC_boss_admiral_ripsnarl();
+    AddSC_boss_captain_cookie();
+    AddSC_boss_foo_reaper_5000();
+    AddSC_boss_glubtok();
+    AddSC_boss_helix_gearbreaker();
+    AddSC_boss_vanessa_van_cleef();
     AddSC_gnomeregan();                     //Gnomeregan
     AddSC_instance_gnomeregan();
     AddSC_grim_batol();                     //Grim Batol
@@ -1049,7 +1095,6 @@ void AddEasternKingdomsScripts()
     AddSC_boss_majordomo();
     AddSC_boss_ragnaros();
     AddSC_instance_molten_core();
-    AddSC_instance_ragefire_chasm();        //Ragefire Chasm
     AddSC_the_scarlet_enclave();            //Scarlet Enclave
     AddSC_the_scarlet_enclave_c1();
     AddSC_the_scarlet_enclave_c2();
@@ -1117,8 +1162,14 @@ void AddEasternKingdomsScripts()
     AddSC_boss_erunak_stonespeaker();
     AddSC_boss_ozumat();
     AddSC_instance_throne_of_the_tides();
-    AddSC_boss_archaedas();                 //Uldaman
+    AddSC_boss_revelosh();                  //Uldaman
+    AddSC_boss_the_lost_dwarves();
     AddSC_boss_ironaya();
+    AddSC_boss_obsidian_sentinel();
+    AddSC_boss_ancient_stone_keeper();
+    AddSC_boss_galgann_firehammer();
+    AddSC_boss_grimlok();
+    AddSC_boss_archaedas();
     AddSC_uldaman();
     AddSC_instance_uldaman();
     AddSC_boss_akilzon();                   //Zul'Aman
@@ -1151,7 +1202,6 @@ void AddEasternKingdomsScripts()
     AddSC_elwynn_forest();
     AddSC_eversong_woods();
     AddSC_ghostlands();
-    AddSC_gilneas_city();
     AddSC_hinterlands();
     AddSC_ironforge();
     AddSC_isle_of_queldanas();
@@ -1167,10 +1217,9 @@ void AddEasternKingdomsScripts()
     AddSC_western_plaguelands();
     AddSC_westfall();
     AddSC_wetlands();
-
-    // gilneas
-    AddSC_gilneas();
-    AddSC_gilneas_duskhaven();
+    AddSC_zone_gilneas_duskhaven();
+    AddSC_zone_gilneas_city();
+    AddSC_zone_gilneas_city2();
 
 #endif
 }
@@ -1187,6 +1236,7 @@ void AddKalimdorScripts()
     AddSC_boss_archimonde();
     AddSC_instance_mount_hyjal();
     AddSC_hyjal_trash();
+    AddSC_zone_hyjal();
     AddSC_boss_rage_winterchill();
     AddSC_boss_anetheron();
     AddSC_boss_kazrogal();
@@ -1228,6 +1278,26 @@ void AddKalimdorScripts()
     AddSC_instance_hour_of_twilight();
     AddSC_instance_culling_of_stratholme();
     AddSC_instance_dire_maul();             //Dire Maul
+    AddSC_dire_maul();
+    AddSC_gordoks_commons();
+    AddSC_capital_gardens();
+    AddSC_warpwood_quarter();
+    AddSC_boss_alzzin_the_wildshaper();
+    AddSC_boss_captain_kromcrush();
+    AddSC_boss_chorush_the_observer();
+    AddSC_boss_guard_fengus();
+    AddSC_boss_guard_moldar();
+    AddSC_boss_guard_slipkik();
+    AddSC_boss_hydrospawn();
+    AddSC_boss_illyanna_ravenoak();
+    AddSC_boss_immolthar();
+    AddSC_boss_king_gordok();
+    AddSC_boss_lethtendris();
+    AddSC_boss_magister_kalendris();
+    AddSC_boss_prince_tortheldrin();
+    AddSC_boss_stomper_kreeg();
+    AddSC_boss_tendris_warpwood();
+    AddSC_boss_zevrim_thornhoof();
     AddSC_boss_shannox();                   //Firelands
     AddSC_boss_bethtilac();
     AddSC_boss_alysrazor();
@@ -1300,6 +1370,13 @@ void AddKalimdorScripts()
     AddSC_boss_zum_rah();                   //Zul'Farrak
     AddSC_zulfarrak();
     AddSC_instance_zulfarrak();
+    AddSC_instance_ragefire_chasm();        // Ragefire Chasm
+    AddSC_ragefire_chasm();
+    AddSC_boss_taragaman_the_hungerer();
+    AddSC_boss_oggleflint();
+    AddSC_boss_jergosh_the_invoker();
+    AddSC_boss_bazzalan();
+
     AddSC_ashenvale();
     AddSC_azshara();
     AddSC_azuremyst_isle();
@@ -1322,6 +1399,7 @@ void AddKalimdorScripts()
     AddSC_thunder_bluff();
     AddSC_ungoro_crater();
     AddSC_winterspring();
+    AddSC_zone_northern_barrens();
 #endif
 }
 

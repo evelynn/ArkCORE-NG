@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -704,6 +704,7 @@ class WorldObject : public Object, public WorldLocation
         bool IsWithinDist3d(Position const* pos, float dist) const;
         bool IsWithinDist2d(float x, float y, float dist) const;
         bool IsWithinDist2d(Position const* pos, float dist) const;
+        bool IsWithinDist2d(Position const pos, float dist) const;
         // use only if you will sure about placing both object at same map
         bool IsWithinDist(WorldObject const* obj, float dist2compare, bool is3D = true) const;
         bool IsWithinDistInMap(WorldObject const* obj, float dist2compare, bool is3D = true) const;
@@ -780,6 +781,7 @@ class WorldObject : public Object, public WorldLocation
 
         Creature*   FindNearestCreature(uint32 entry, float range, bool alive = true) const;
         std::list<Creature*> FindNearestCreatures(uint32 entry, float range) const;
+        std::vector<Creature*> FindNearestCreatures(uint32 entry, float range, bool alive) const;
         Creature*   FindRandomCreatureInRange(uint32 entry, float range, bool alive);
         GameObject* FindNearestGameObject(uint32 entry, float range) const;
         GameObject* FindNearestGameObjectOfType(GameobjectTypes type, float range) const;

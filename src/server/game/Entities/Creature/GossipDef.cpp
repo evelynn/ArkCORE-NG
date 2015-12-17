@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -28,6 +28,7 @@
 GossipMenu::GossipMenu()
 {
     _menuId = -1;
+    _npcTextId = 0;
     _locale = DEFAULT_LOCALE;
     _senderGUID = 0;
 }
@@ -192,6 +193,7 @@ void PlayerMenu::ClearMenus()
 void PlayerMenu::SendGossipMenu(uint32 titleTextId, uint64 objectGUID)
 {
     _gossipMenu.SetSenderGUID(objectGUID);
+    _gossipMenu.SetNpcTextId(titleTextId);
 
     WorldPacket data(SMSG_GOSSIP_MESSAGE, 100);         // guess size
     data << uint64(objectGUID);

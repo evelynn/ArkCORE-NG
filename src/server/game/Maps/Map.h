@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2008-2014 TrinityCore <http://www.trinitycore.org/>
- * Copyright (C) 2011-2014 ArkCORE <http://www.arkania.net/>
+ * Copyright (C) 2011-2015 ArkCORE <http://www.arkania.net/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -343,6 +343,7 @@ class Map : public GridRefManager<NGridType>
         bool GetAreaInfo(float x, float y, float z, uint32 &mogpflags, int32 &adtId, int32 &rootId, int32 &groupId) const;
 
         bool IsOutdoors(float x, float y, float z) const;
+        bool IsIndoors(WorldObject* wo) const;
 
         uint8 GetTerrainType(float x, float y) const;
         float GetWaterLevel(float x, float y) const;

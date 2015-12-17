@@ -16,6 +16,10 @@ project(ArkCORE4-NG)
 cmake_minimum_required(VERSION 2.8)
 cmake_policy(SET CMP0005 OLD)
 
+# add this options before PROJECT keyword
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
+
 # Set RPATH-handing (CMake parameters)
 set(CMAKE_SKIP_BUILD_RPATH 0)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH 0)
@@ -51,6 +55,8 @@ set(ACE_EXPECTED_VERSION 5.8.3)
 find_package(PCHSupport)
 find_package(ACE REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
+
 if( NOT USE_MYSQL_SOURCES )
   find_package(MySQL REQUIRED)
 endif()
@@ -59,6 +65,10 @@ if( UNIX )
   find_package(Readline)
   find_package(ZLIB)
   find_package(BZip2)
+endif()
+
+if(NOT WITHOUT_GIT)
+  find_package(Git)
 endif()
 
 # Find revision ID and hash of the sourcetree
