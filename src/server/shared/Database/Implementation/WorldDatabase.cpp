@@ -95,9 +95,6 @@ void WorldDatabaseConnection::DoPrepareStatements()
     PrepareStatement(WORLD_SEL_REQ_XP, "SELECT xp_for_next_level FROM player_xp_for_level WHERE lvl = ?", CONNECTION_SYNCH);
     PrepareStatement(WORLD_SEL_GRAVEYARDS, "SELECT id FROM game_graveyard_zone WHERE faction=? OR faction=0", CONNECTION_ASYNC);
     PrepareStatement(WORLD_SEL_GUILD_CHALLENGES, "SELECT challengeId, challengeRewardId, challengeType, challengeEntry, xpReward, goldReward, goldExtraReward FROM guild_challenges JOIN guild_challenges_rewards ON guild_challenges.challengeRewardId = guild_challenges_rewards.rewardId", CONNECTION_SYNCH);
-    // Bot
-    PrepareStatement(WORLD_SEL_NPCBOT_TEMPLATE, "SELECT entry, trainer_race FROM creature_template WHERE scriptname = ? and trainer_class = ? and trainer_race IN (?, ?, ?, ?, ?, ?)", CONNECTION_SYNCH);
-    PrepareStatement(WORLD_SEL_NPCBOT_PET_LEVELSTATS, "SELECT hp, mana, armor, str, agi, sta, inte, spi FROM pet_levelstats WHERE creature_entry = ? AND level = ?", CONNECTION_SYNCH);
 
     // Archaeology
     PrepareStatement(WORLD_SEL_POSITION_ENTRY, "SELECT entry, id, position_X, position_Y  FROM archaeology_positions_template WHERE entry = ? AND id = ?", CONNECTION_SYNCH);
