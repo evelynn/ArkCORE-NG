@@ -204,10 +204,6 @@ bool Player::UpdateAllStats()
     RecalculateRating(CR_ARMOR_PENETRATION);
     UpdateAllResistances();
 
-    for (uint8 i = 0; i != GetMaxNpcBots(); ++i)
-        if (Creature* bot = GetBotMap(i)->_Cre())
-            bot->SetBotShouldUpdateStats();
-
     return true;
 }
 
