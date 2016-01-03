@@ -656,4 +656,28 @@ void CharacterDatabaseConnection::DoPrepareStatements()
     PrepareStatement(CHAR_DEL_PLAYER_SURVEY_DATA, "DELETE FROM character_archaeology_digsite WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_PLAYER_CURRENT_DATA, "DELETE FROM character_archaeology_current WHERE guid = ?", CONNECTION_ASYNC);
     PrepareStatement(CHAR_DEL_PLAYER_COMPLETE_DATA, "DELETE FROM character_archaeology_completed WHERE guid = ?", CONNECTION_ASYNC);
+    // Prepatch by LordPsyan
+    // 01
+    // 02
+    // 03
+    // 04
+    // 05
+    // 06
+    // 07
+    // 08
+    // 09
+    // 10
+    // 11
+    // 12
+    // 13
+    // 14
+    // 15
+    // 16
+    // 17
+    // 18
+    // 19
+    // 20
+    // Visit http://www.realmsofwarcraft.com/bb for forums and information
+    //
+    // End of prepatch
 }
