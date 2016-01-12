@@ -100,7 +100,7 @@ enum LfgJoinResult
     LFG_JOIN_GROUPFULL                           = 0x1C,   // Your group is full
     LFG_JOIN_INTERNAL_ERROR                      = 0x1E,   // Internal LFG Error
     LFG_JOIN_NOT_MEET_REQS                       = 0x1F,   // You do not meet the requirements for the chosen dungeons
-    //LFG_JOIN_PARTY_NOT_MEET_REQS                 = 6,      // One or more party members do not meet the requirements for the chosen dungeons
+    LFG_JOIN_PARTY_NOT_MEET_REQS                 = 6,      // One or more party members do not meet the requirements for the chosen dungeons
     LFG_JOIN_MIXED_RAID_DUNGEON                  = 0x20,   // You cannot mix dungeons, raids, and random when picking dungeons
     LFG_JOIN_MULTI_REALM                         = 0x21,   // The dungeon you chose does not support players from multiple realms
     LFG_JOIN_DISCONNECTED                        = 0x22,   // One or more party members are pending invites or disconnected
@@ -147,7 +147,7 @@ typedef std::map<uint64, LfgProposalPlayer> LfgProposalPlayerContainer;
 typedef std::map<uint64, LfgPlayerBoot> LfgPlayerBootContainer;
 typedef std::map<uint64, LfgGroupData> LfgGroupDataContainer;
 typedef std::map<uint64, LfgPlayerData> LfgPlayerDataContainer;
-typedef UNORDERED_MAP<uint32, LFGDungeonData> LFGDungeonContainer;
+typedef std::unordered_map<uint32, LFGDungeonData> LFGDungeonContainer;
 
 // Data needed by SMSG_LFG_JOIN_RESULT
 struct LfgJoinResultData

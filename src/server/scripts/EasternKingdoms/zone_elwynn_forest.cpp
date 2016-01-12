@@ -126,12 +126,12 @@ public:
 		uint32 _coolDown;
 		float  _angle;
 
-        void Reset() override
+        void InitializeAI() override
         {
             me->GetMotionMaster()->MovePath(951, true);
-			_coolDown = 0;
-			_phase = 0;
-			_angle = 0;
+            _coolDown = 0;
+            _phase = 0;
+            _angle = 0;
         }
 
         void CastHeal(Creature* infantry)
@@ -218,6 +218,7 @@ public:
 
 							m_SayPaxtonCooldownTimer = 10000;
 						}
+                        uiDamage = 0;
 					}
                     else
                         uiDamage = 0;
@@ -919,11 +920,11 @@ public:
 
                 if (Summon)
                 {
-                    Creature* General = Unit::GetCreature(*me, GeneralGUID);
-                    Creature* Raga2 = Unit::GetCreature(*me, Raga2GUID);
-                    Creature* Raga1 = Unit::GetCreature(*me, Raga1GUID);
-                    Creature* Mage2 = Unit::GetCreature(*me, Mage2GUID);
-                    Creature* Mage1 = Unit::GetCreature(*me, Mage1GUID);
+					Creature* General = ObjectAccessor::GetCreature(*me, GeneralGUID);
+					Creature* Raga2 = ObjectAccessor::GetCreature(*me, Raga2GUID);
+					Creature* Raga1 = ObjectAccessor::GetCreature(*me, Raga1GUID);
+					Creature* Mage2 = ObjectAccessor::GetCreature(*me, Mage2GUID);
+					Creature* Mage1 = ObjectAccessor::GetCreature(*me, Mage1GUID);
 
                     if (!bCasted)
                     {
@@ -944,11 +945,11 @@ public:
             {
                 if (m_uiPhaseTimer <= diff)
                 {
-                    Creature* General = Unit::GetCreature(*me, GeneralGUID);
-                    Creature* Raga2 = Unit::GetCreature(*me, Raga2GUID);
-                    Creature* Raga1 = Unit::GetCreature(*me, Raga1GUID);
-                    Creature* Mage2 = Unit::GetCreature(*me, Mage2GUID);
-                    Creature* Mage1 = Unit::GetCreature(*me, Mage1GUID);
+					Creature* General = ObjectAccessor::GetCreature(*me, GeneralGUID);
+					Creature* Raga2 = ObjectAccessor::GetCreature(*me, Raga2GUID);
+					Creature* Raga1 = ObjectAccessor::GetCreature(*me, Raga1GUID);
+					Creature* Mage2 = ObjectAccessor::GetCreature(*me, Mage2GUID);
+					Creature* Mage1 = ObjectAccessor::GetCreature(*me, Mage1GUID);
 
                     switch (phase)
                     {
@@ -974,7 +975,7 @@ public:
                             break;
                         case 5:
                         {
-                            if (Creature* General = Unit::GetCreature(*me, GeneralGUID))
+							if (Creature* General = ObjectAccessor::GetCreature(*me, GeneralGUID))
                             {
                                 General->AI()->Talk(1);
                                 General->AddUnitMovementFlag(MOVEMENTFLAG_WALKING);

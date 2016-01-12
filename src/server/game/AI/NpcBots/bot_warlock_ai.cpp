@@ -1,9 +1,9 @@
 #include "bot_ai.h"
+//#include "botmgr.h"
 //#include "Group.h"
 #include "Player.h"
 #include "ScriptMgr.h"
 #include "SpellAuras.h"
-
 /*
 Warlock NpcBot (reworked by Graff onlysuffering@gmail.com)
 Voidwalker pet AI included
@@ -22,7 +22,7 @@ public:
 
     bool OnGossipHello(Player* player, Creature* creature)
     {
-        return bot_minion_ai::OnGossipHello(player, creature);
+        return bot_minion_ai::OnGossipHello(player, creature, 0);
     }
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action)
@@ -32,48 +32,59 @@ public:
         return true;
     }
 
+    bool OnGossipSelectCode(Player* player, Creature* creature, uint32 sender, uint32 action, char const* code)
+    {
+        if (bot_minion_ai* ai = creature->GetBotMinionAI())
+            return ai->OnGossipSelectCode(player, creature, sender, action, code);
+        return true;
+    }
+
     struct warlock_botAI : public bot_minion_ai
     {
-        warlock_botAI(Creature* creature) : bot_minion_ai(creature) { }
+        warlock_botAI(Creature* creature) : bot_minion_ai(creature)
+        {
+            _botclass = BOT_CLASS_WARLOCK;
+        }
 
         bool doCast(Unit* victim, uint32 spellId, bool triggered = false)
         {
-            if (checkBotCast(victim, spellId, CLASS_WARRIOR) != SPELL_CAST_OK)
+            if (CheckBotCast(victim, spellId, BOT_CLASS_WARRIOR) != SPELL_CAST_OK)
                 return false;
 
             return bot_ai::doCast(victim, spellId, triggered);
         }
 
-        void EnterCombat(Unit*) { }
+        void EnterCombat(Unit* u) { bot_minion_ai::EnterCombat(u); }
         void Aggro(Unit*) { }
         void AttackStart(Unit*) { }
         void KilledUnit(Unit*) { }
-        void EnterEvadeMode() { }
-        void MoveInLineOfSight(Unit*) { }
-        void JustDied(Unit*) { me->SetBotsPetDied(); master->SetNpcBotDied(me->GetGUID()); }
-        void DoNonCombatActions()
-        {}
+        void EnterEvadeMode() { bot_minion_ai::EnterEvadeMode(); }
+        void MoveInLineOfSight(Unit* u) { bot_minion_ai::MoveInLineOfSight(u); }
+        void JustDied(Unit* u) { me->SetBotsPetDied(); bot_minion_ai::JustDied(u); }
+        void DoNonCombatActions() { }
 
         void StartAttack(Unit* u, bool force = false)
         {
             if (GetBotCommandState() == COMMAND_ATTACK && !force) return;
             Aggro(u);
-            GetInPosition(force, true);
             SetBotCommandState(COMMAND_ATTACK);
-            fear_cd = std::max<uint32>(fear_cd, 1000);
+            OnStartAttack(u);
+            GetInPosition(force);
+            feartimer = std::max<uint32>(feartimer, 1000);
         }
 
         void UpdateAI(uint32 diff)
         {
             ReduceCD(diff);
-            if (IAmDead()) return;
-            if (!me->GetVictim())
-                Evade();
+            if (!GlobalUpdate(diff))
+                return;
+            CheckAttackState();
             CheckAuras();
             if (wait == 0)
                 wait = GetWait();
             else
                 return;
+            BreakCC(diff);
             if (CCed(me)) return;
 
             ////if pet is dead or unreachable
@@ -83,7 +94,7 @@ public:
             //        SummonBotsPet(PET_VOIDWALKER);
 
             //TODO: implement healthstone
-            if (GetHealthPCT(me) < 50 && Potion_cd <= diff)
+            if (Potion_cd <= diff && GetHealthPCT(me) < 67)
             {
                 temptimer = GC_Timer;
                 if (doCast(me, HEALINGPOTION))
@@ -92,7 +103,7 @@ public:
                     GC_Timer = temptimer;
                 }
             }
-            if (GetManaPCT(me) < 50 && Potion_cd <= diff)
+            if (Potion_cd <= diff && GetManaPCT(me) < 50)
             {
                 temptimer = GC_Timer;
                 if (doCast(me, MANAPOTION))
@@ -104,7 +115,7 @@ public:
             if (!me->IsInCombat())
                 DoNonCombatActions();
 
-            if (!CheckAttackTarget(CLASS_WARLOCK))
+            if (!CheckAttackTarget(BOT_CLASS_WARLOCK))
                 return;
 
             DoNormalAttack(diff);
@@ -123,76 +134,64 @@ public:
 
             //TODO: add more damage spells
 
-            if (fear_cd <= diff && GC_Timer <= diff)
-            { CheckFear(); fear_cd = 2000; }
+            if (feartimer <= diff && GC_Timer <= diff)
+            { CheckFear(); feartimer = 2000; }
 
-            if (RAIN_OF_FIRE && Rain_of_fire_cd <= diff && GC_Timer <= diff && !me->isMoving() && Rand() < 25)
+            if (IsSpellReady(RAIN_OF_FIRE_1, diff) && !me->isMoving() && HasRole(BOT_ROLE_DPS) && Rand() < 25)
             {
-                Unit* blizztarget = FindAOETarget(35, true);
-                if (blizztarget && doCast(blizztarget, RAIN_OF_FIRE))
-                {
-                    Rain_of_fire_cd = 5000;
+                Unit* blizztarget = FindAOETarget(30, true);
+                if (blizztarget && doCast(blizztarget, GetSpell(RAIN_OF_FIRE_1)))
                     return;
-                }
-                Rain_of_fire_cd = 2000;//fail
+                SetSpellCooldown(RAIN_OF_FIRE_1, 2000);//fail
             }
 
             float dist = me->GetExactDist(opponent);
 
-            if (CURSE_OF_THE_ELEMENTS && GC_Timer <= diff && dist < 40 && Rand() < 15 &&
-                !HasAuraName(opponent, CURSE_OF_THE_ELEMENTS) &&
-                doCast(opponent, CURSE_OF_THE_ELEMENTS))
+            if (IsSpellReady(CURSE_OF_THE_ELEMENTS_1, diff) && dist < 30 && Rand() < 15 &&
+                !HasAuraName(opponent, CURSE_OF_THE_ELEMENTS_1) &&
+                doCast(opponent, GetSpell(CURSE_OF_THE_ELEMENTS_1)))
             {
                 GC_Timer = 800;
                 return;
             }
 
-            if (CORRUPTION && GC_Timer <= diff && dist < 40 && Rand() < 25 &&
-                !opponent->HasAura(CORRUPTION, me->GetGUID()) &&
-                doCast(opponent, CORRUPTION))
+            if (IsSpellReady(CORRUPTION_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 25 &&
+                !opponent->HasAura(GetSpell(CORRUPTION_1), me->GetGUID()) &&
+                doCast(opponent, GetSpell(CORRUPTION_1)))
                 return;
 
-            if (HAUNT && Haunt_cd <= diff && GC_Timer <= diff && dist < 40 && Rand() < 25 &&
-                !opponent->HasAura(HAUNT, me->GetGUID()) &&
-                doCast(opponent, HAUNT))
-            {
-                Haunt_cd = 8000;
+            if (IsSpellReady(HAUNT_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 25 &&
+                !opponent->HasAura(GetSpell(HAUNT_1), me->GetGUID()) &&
+                doCast(opponent, GetSpell(HAUNT_1)))
                 return;
-            }
 
-            if (GC_Timer <= diff && dist < 40 && Rand() < 15 && !Afflicted(opponent))
+            if (GC_Timer <= diff && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 15 && !Afflicted(opponent))
             {
-                if (IMMOLATE && (!CONFLAGRATE || conflagarate_cd <= 8000) && doCast(opponent, IMMOLATE))
+                if (GetSpellCooldown(CONFLAGRATE_1) <= 8000 && doCast(opponent, GetSpell(IMMOLATE_1)))
                     return;
-                else if (UNSTABLE_AFFLICTION && doCast(opponent, UNSTABLE_AFFLICTION))
+                else if (doCast(opponent, GetSpell(UNSTABLE_AFFLICTION_1)))
                     return;
             }
 
-            if (CONFLAGRATE && conflagarate_cd <= diff && GC_Timer <= diff && dist < 40 && Rand() < 35 &&
-                HasAuraName(opponent, IMMOLATE) &&
-                doCast(opponent, CONFLAGRATE))
-            {
-                conflagarate_cd = 8000;
+            if (IsSpellReady(CONFLAGRATE_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 35 &&
+                HasAuraName(opponent, IMMOLATE_1) &&
+                doCast(opponent, GetSpell(CONFLAGRATE_1)))
                 return;
-            }
 
-            if (CHAOS_BOLT && chaos_bolt_cd <= diff && GC_Timer <= diff && dist < 40 && Rand() < 50 &&
-                doCast(opponent, CHAOS_BOLT))
-            {
-                chaos_bolt_cd = me->getLevel() < 80 ? 10000 : 8000;
+            if (IsSpellReady(CHAOS_BOLT_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 50 &&
+                doCast(opponent, GetSpell(CHAOS_BOLT_1)))
                 return;
-            }
 
-            if (SHADOW_BOLT && GC_Timer <= diff && dist < 40 &&
-                doCast(opponent, SHADOW_BOLT))
+            if (IsSpellReady(SHADOW_BOLT_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 &&
+                doCast(opponent, GetSpell(SHADOW_BOLT_1)))
                 return;
         }
 
         uint8 Afflicted(Unit* target)
         {
             if (!target || target->IsDead()) return 0;
-            bool aff = HasAuraName(target, UNSTABLE_AFFLICTION, me->GetGUID());
-            bool imm = HasAuraName(target, IMMOLATE, me->GetGUID());
+            bool aff = HasAuraName(target, UNSTABLE_AFFLICTION_1, me->GetGUID());
+            bool imm = HasAuraName(target, IMMOLATE_1, me->GetGUID());
             if (imm) return 1;
             if (aff) return 2;
             return 0;
@@ -200,6 +199,7 @@ public:
 
         void CheckFear()
         {
+            uint32 FEAR = GetSpell(FEAR_1);
             if (Unit* u = FindAffectedTarget(FEAR, me->GetGUID()))
                 if (Aura* aura = u->GetAura(FEAR, me->GetGUID()))
                     if (aura->GetDuration() > 3000)
@@ -221,9 +221,9 @@ public:
         //        me->SetBotsPet(NULL);
         //}
 
-        void ApplyClassDamageMultiplierSpell(int32& damage, SpellNonMeleeDamage& /*damageinfo*/, SpellInfo const* spellInfo, WeaponAttackType /*attackType*/, bool& crit) const
+        void ApplyClassDamageMultiplierSpell(int32& damage, SpellNonMeleeDamage& /*damageinfo*/, SpellInfo const* /*spellInfo*/, WeaponAttackType /*attackType*/, bool& crit) const
         {
-            uint32 spellId = spellInfo->Id;
+            //uint32 spellId = spellInfo->Id;
             //uint8 lvl = me->getLevel();
             float fdamage = float(damage);
             //1) apply additional crit chance. This additional chance roll will replace original (balance safe)
@@ -251,42 +251,42 @@ public:
             //if (lvl >= 11 && spellId == FROSTBOLT && damageinfo.target && damageinfo.target->isFrozen())
             //    pctbonus *= 0.2f;
 
-            //Spellpower bonus damage (temp)
-            if (m_spellpower > 0)
-            {
-                if (spellId == SHADOW_BOLT)
-                    fdamage += m_spellpower * 1.38f;
-                else if (spellId == IMMOLATE)
-                    fdamage += m_spellpower * 0.75f; //guessed
-                else if (spellId == CONFLAGRATE)
-                    fdamage += m_spellpower * 2.75f; //guessed
-                else if (spellId == CHAOS_BOLT)
-                    fdamage += m_spellpower * 2.25f * 1.24f;
-                else if (spellId == RAIN_OF_FIRE || spellId == 42223)
-                    fdamage += m_spellpower * 0.25f * 4.f;
-                else if (spellId == HAUNT)
-                    fdamage += m_spellpower * 1.75f;
-            }
+            ////Spellpower bonus damage (temp)
+            //if (m_spellpower > 0)
+            //{
+            //    if (spellId == SHADOW_BOLT)
+            //        fdamage += m_spellpower * 1.38f;
+            //    else if (spellId == IMMOLATE)
+            //        fdamage += m_spellpower * 0.75f; //guessed
+            //    else if (spellId == CONFLAGRATE)
+            //        fdamage += m_spellpower * 2.75f; //guessed
+            //    else if (spellId == CHAOS_BOLT)
+            //        fdamage += m_spellpower * 2.25f * 1.24f;
+            //    else if (spellId == RAIN_OF_FIRE || spellId == 42223)
+            //        fdamage += m_spellpower * 0.25f * 4.f;
+            //    else if (spellId == HAUNT)
+            //        fdamage += m_spellpower * 1.75f;
+            //}
 
             damage = int32(fdamage * (1.0f + pctbonus));
         }
 
-        void ApplyClassDamageMultiplierEffect(SpellInfo const* spellInfo, uint8 effect_index, float& value) const
+        void ApplyClassDamageMultiplierEffect(SpellInfo const* /*spellInfo*/, uint8 /*effect_index*/, float& /*value*/) const
         {
-            uint32 spellId = spellInfo->Id;
+            //uint32 spellId = spellInfo->Id;
 
             //float pct_mod = 1.f;
 
             //Spellpower bonus damage (temp)
-            if (spellInfo->Effects[effect_index].ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE)
-            {
-                if (spellId == CORRUPTION)
-                    value += m_spellpower * 1.35f / float(spellInfo->GetMaxDuration() / spellInfo->Effects[effect_index].Amplitude);
-                else if (spellId == IMMOLATE)
-                    value += m_spellpower * 1.59f / float(spellInfo->GetMaxDuration() / spellInfo->Effects[effect_index].Amplitude);
-                else if (spellId == UNSTABLE_AFFLICTION)
-                    value += m_spellpower * 1.68f / float(spellInfo->GetMaxDuration() / spellInfo->Effects[effect_index].Amplitude);
-            }
+            //if (spellInfo->Effects[effect_index].ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE)
+            //{
+            //    if (spellId == CORRUPTION)
+            //        value += m_spellpower * 1.35f / float(spellInfo->GetMaxDuration() / spellInfo->Effects[effect_index].Amplitude);
+            //    else if (spellId == IMMOLATE)
+            //        value += m_spellpower * 1.59f / float(spellInfo->GetMaxDuration() / spellInfo->Effects[effect_index].Amplitude);
+            //    else if (spellId == UNSTABLE_AFFLICTION)
+            //        value += m_spellpower * 1.68f / float(spellInfo->GetMaxDuration() / spellInfo->Effects[effect_index].Amplitude);
+            //}
 
             //value *= pct_mod;
         }
@@ -296,29 +296,15 @@ public:
             OnSpellHit(caster, spell);
         }
 
-        void DamageDealt(Unit* victim, uint32& /*damage*/, DamageEffectType damageType)
+        void DamageDealt(Unit* victim, uint32& damage, DamageEffectType damageType)
         {
-            if (victim == me)
-                return;
-
-            if (damageType == DIRECT_DAMAGE || damageType == SPELL_DIRECT_DAMAGE)
-            {
-                for (uint8 i = 0; i != MAX_BOT_CTC_SPELLS; ++i)
-                {
-                    if (_ctc[i].first && !_ctc[i].second)
-                    {
-                        if (urand(1,100) <= CalcCTC(_ctc[i].first))
-                            _ctc[i].second = 1000;
-
-                        if (_ctc[i].second > 0)
-                            me->CastSpell(victim, _ctc[i].first, true);
-                    }
-                }
-            }
+            bot_ai::DamageDealt(victim, damage, damageType);
         }
 
         void DamageTaken(Unit* u, uint32& /*damage*/)
         {
+            if (!u->IsInCombat() && !me->IsInCombat())
+                return;
             OnOwnerDamagedBy(u);
         }
 
@@ -329,61 +315,39 @@ public:
 
         void Reset()
         {
-            Rain_of_fire_cd = 0;
-            Haunt_cd = 0;
-            conflagarate_cd = 0;
-            chaos_bolt_cd = 0;
-            fear_cd = 0;
+            feartimer = 0;
 
-            if (master)
-            {
-                setStats(CLASS_WARLOCK, me->getRace(), master->getLevel(), true);
-                //TODO: passives
-                ApplyClassPassives();
-                ApplyPassives(CLASS_WARLOCK);
-            }
+            DefaultInit();
         }
 
         void ReduceCD(uint32 diff)
         {
-            CommonTimers(diff);
-            if (Rain_of_fire_cd > diff)     Rain_of_fire_cd -= diff;
-            if (Haunt_cd > diff)            Haunt_cd -= diff;
-            if (conflagarate_cd > diff)     conflagarate_cd -= diff;
-            if (chaos_bolt_cd > diff)       chaos_bolt_cd -= diff;
-            if (fear_cd > diff)             fear_cd -= diff;
+            if (feartimer > diff)                   feartimer -= diff;
         }
-
-        bool CanRespawn()
-        {return false;}
 
         void InitSpells()
         {
             uint8 lvl = me->getLevel();
-            CURSE_OF_THE_ELEMENTS                   = InitSpell(me, CURSE_OF_THE_ELEMENTS_1);
-            SHADOW_BOLT                             = InitSpell(me, SHADOW_BOLT_1);
-            IMMOLATE                                = InitSpell(me, IMMOLATE_1);
-            CONFLAGRATE                 = lvl >= 10 ? CONFLAGRATE_1 : 0;
-  /*Talent*/CHAOS_BOLT                  = lvl >= 68 ? InitSpell(me, CHAOS_BOLT_1) : 0;
-            RAIN_OF_FIRE                            = InitSpell(me, RAIN_OF_FIRE_1);
-  /*Talent*/HAUNT                       = lvl >= 69 ? InitSpell(me, HAUNT_1) : 0;
-            CORRUPTION                              = InitSpell(me, CORRUPTION_1);
-            UNSTABLE_AFFLICTION         = lvl >= 12 ? InitSpell(me, UNSTABLE_AFFLICTION_1) : 0;
-            FEAR                                    = InitSpell(me, FEAR_1);
+            InitSpellMap(CURSE_OF_THE_ELEMENTS_1);
+            InitSpellMap(SHADOW_BOLT_1);
+            InitSpellMap(IMMOLATE_1);
+            lvl >= 40 ? InitSpellMap(CONFLAGRATE_1) : RemoveSpell(CONFLAGRATE_1);
+  /*Talent*/lvl >= 60 ? InitSpellMap(CHAOS_BOLT_1) : RemoveSpell(CHAOS_BOLT_1);
+            InitSpellMap(RAIN_OF_FIRE_1);
+  /*Talent*/lvl >= 60 ? InitSpellMap(HAUNT_1) : RemoveSpell(HAUNT_1);
+            InitSpellMap(CORRUPTION_1);
+  /*Talent*/lvl >= 50 ? InitSpellMap(UNSTABLE_AFFLICTION_1) : RemoveSpell(UNSTABLE_AFFLICTION_1);
+            InitSpellMap(FEAR_1);
         }
 
-        void ApplyClassPassives() {}
+        //TODO
+        void ApplyClassPassives() { }
 
     private:
-        uint32
-  /*Curses*/CURSE_OF_THE_ELEMENTS,
-/*Destruct*/SHADOW_BOLT, IMMOLATE, CONFLAGRATE, CHAOS_BOLT, RAIN_OF_FIRE,
- /*Afflict*/HAUNT, CORRUPTION, UNSTABLE_AFFLICTION,
-   /*Other*/FEAR;
         //Timers
-        uint32 Rain_of_fire_cd, Haunt_cd, conflagarate_cd, chaos_bolt_cd, fear_cd;
+        uint32 feartimer;
 
-        enum WarlockBaseSpells// all orignals
+        enum WarlockBaseSpells
         {
             CURSE_OF_THE_ELEMENTS_1             = 1490,
             SHADOW_BOLT_1                       = 686,
@@ -391,10 +355,10 @@ public:
             CONFLAGRATE_1                       = 17962,
             CHAOS_BOLT_1                        = 50796,
             RAIN_OF_FIRE_1                      = 5740,
-            HAUNT_1                             = 48181,
+            HAUNT_1                             = 59164,
             CORRUPTION_1                        = 172,
-            UNSTABLE_AFFLICTION_1               = 30108,
-            FEAR_1                              = 5782
+            UNSTABLE_AFFLICTION_1               = 30404,
+            FEAR_1                              = 6215
         };
         enum WarlockPassives
         {
@@ -414,11 +378,14 @@ public:
 
     struct voidwalker_botAI : public bot_pet_ai
     {
-        voidwalker_botAI(Creature* creature) : bot_pet_ai(creature) { }
+        voidwalker_botAI(Creature* creature) : bot_pet_ai(creature)
+        {
+            _botclass = BOT_CLASS_MAGE;
+        }
 
         bool doCast(Unit* victim, uint32 spellId, bool triggered = false)
         {
-            if (checkBotCast(victim, spellId, CLASS_NONE) != SPELL_CAST_OK)
+            if (CheckBotCast(victim, spellId, BOT_CLASS_NONE) != SPELL_CAST_OK)
                 return false;
             return bot_ai::doCast(victim, spellId, triggered);
         }
@@ -430,29 +397,27 @@ public:
         void EnterEvadeMode() { }
         void MoveInLineOfSight(Unit*) { }
         void JustDied(Unit*) { m_creatureOwner->SetBotsPetDied(); }
-
-        void DoNonCombatActions()
-        {}
+        void DoNonCombatActions() { }
 
         void StartAttack(Unit* u, bool force = false)
         {
             if (GetBotCommandState() == COMMAND_ATTACK && !force) return;
             Aggro(u);
-            GetInPosition(force, false);
             SetBotCommandState(COMMAND_ATTACK);
+            OnStartAttack(u);
+            GetInPosition(force);
         }
 
         void UpdateAI(uint32 diff)
         {
             ReduceCD(diff);
             if (IAmDead()) return;
-            if (me->GetVictim())
-                DoMeleeAttackIfReady();
+            CheckAttackState();
+            CheckAuras();
             if (wait == 0)
                 wait = GetWait();
             else
                 return;
-            CheckAuras();
             if (CCed(me)) return;
 
             //TODO: add checks to help owner
@@ -483,12 +448,11 @@ public:
             float meleedist = me->GetDistance(opponent);
 
             //TORMENT
-            if (TORMENT && Torment_cd <= diff && meleedist < 5 && (!tank || tank == me || opponent->GetVictim() == m_creatureOwner))
+            if (IsSpellReady(TORMENT_1, diff, false) && meleedist < 5 && !IsTank(opponent->GetVictim()))
             {
                 temptimer = GC_Timer;
-                if (doCast(opponent, TORMENT))
+                if (doCast(opponent, GetSpell(TORMENT_1)))
                 {
-                    Torment_cd = 5000;
                     GC_Timer = temptimer;
                     return;
                 }
@@ -517,38 +481,26 @@ public:
 
         void Reset()
         {
-            Torment_cd = 0;
-
             if (master && m_creatureOwner)
             {
-                setStats(master->getLevel(), PET_TYPE_VOIDWALKER, true);
-                ApplyPassives(PET_TYPE_VOIDWALKER);
-                ApplyClassPassives();
+                DefaultInit();
                 SetBaseArmor(162 * master->getLevel());
             }
         }
 
-        void ReduceCD(uint32 diff)
+        void ReduceCD(uint32 /*diff*/)
         {
-            CommonTimers(diff);
-            if (Torment_cd > diff)              Torment_cd -= diff;
         }
-
-        bool CanRespawn()
-        {return false;}
 
         void InitSpells()
         {
-            TORMENT                             = InitSpell(me, TORMENT_1);
+            InitSpellMap(TORMENT_1);
         }
 
-        void ApplyClassPassives() {}
+        void ApplyClassPassives() { }
 
     private:
-        uint32
-            TORMENT;
         //Timers
-        uint32 Torment_cd;
 
         enum VoidwalkerBaseSpells
         {

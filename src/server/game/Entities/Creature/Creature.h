@@ -38,7 +38,7 @@ class Player;
 class SpellInfo;
 class WorldSession;
 
-// npc_bot
+// npcbot
 class bot_ai;
 class bot_minion_ai;
 class bot_pet_ai;
@@ -60,7 +60,7 @@ enum CreatureFlagsExtra
     CREATURE_FLAG_EXTRA_NO_SKILLGAIN    = 0x00040000,       // creature won't increase weapon skills
     CREATURE_FLAG_EXTRA_TAUNT_DIMINISH  = 0x00080000,       // Taunt is a subject to diminishing returns on this creautre
     CREATURE_FLAG_EXTRA_ALL_DIMINISH    = 0x00100000,       // Creature is subject to all diminishing returns as player are
-    CREATURE_FLAG_EXTRA_NPCBOT          = 0x04000000,       // NPCBot custom flag
+    CREATURE_FLAG_EXTRA_NPCBOT          = 0x04000000,       // custom flag for NPCBots (not confirmed safe)
     CREATURE_FLAG_EXTRA_DUNGEON_BOSS    = 0x10000000        // creature is a dungeon boss (SET DYNAMICALLY, DO NOT ADD IN DB)
 };
 
@@ -69,7 +69,7 @@ enum CreatureFlagsExtra
     CREATURE_FLAG_EXTRA_NO_CRUSH | CREATURE_FLAG_EXTRA_NO_XP_AT_KILL | CREATURE_FLAG_EXTRA_TRIGGER | \
     CREATURE_FLAG_EXTRA_NO_TAUNT | CREATURE_FLAG_EXTRA_WORLDEVENT | CREATURE_FLAG_EXTRA_NO_CRIT | \
     CREATURE_FLAG_EXTRA_NO_SKILLGAIN | CREATURE_FLAG_EXTRA_TAUNT_DIMINISH | CREATURE_FLAG_EXTRA_ALL_DIMINISH | \
-    CREATURE_FLAG_EXTRA_GUARD | CREATURE_FLAG_EXTRA_NPCBOT)
+    CREATURE_FLAG_EXTRA_NPCBOT | CREATURE_FLAG_EXTRA_GUARD)
 
 #define MAX_KILL_CREDIT 2
 #define CREATURE_REGEN_INTERVAL 2 * IN_MILLISECONDS
@@ -84,10 +84,10 @@ struct CreatureTemplate
     uint32  Entry;
     uint32  DifficultyEntry[MAX_DIFFICULTY - 1];
     uint32  KillCredit[MAX_KILL_CREDIT];
-    uint32  Modelid1;
-    uint32  Modelid2;
-    uint32  Modelid3;
-    uint32  Modelid4;
+    int32   Modelid1;
+    int32   Modelid2;
+    int32   Modelid3;
+    int32   Modelid4;
     std::string  Name;
     std::string  SubName;
     std::string  IconName;
@@ -147,8 +147,8 @@ struct CreatureTemplate
     uint32  MechanicImmuneMask;
     uint32  flags_extra;
     uint32  ScriptID;
-    uint32  GetRandomValidModelId() const;
-    uint32  GetFirstValidModelId() const;
+    int32   GetRandomValidModelId() const;
+    int32   GetFirstValidModelId() const;
 
     // helpers
     SkillType GetRequiredLootSkill() const
@@ -179,7 +179,7 @@ struct CreatureTemplate
 };
 
 // Benchmarked: Faster than std::map (insert/find)
-typedef UNORDERED_MAP<uint32, CreatureTemplate> CreatureTemplateContainer;
+typedef std::unordered_map<uint32, CreatureTemplate> CreatureTemplateContainer;
 
 // GCC have alternative #pragma pack(N) syntax and old gcc version not support pack(push, N), also any gcc version not support it at some platform
 #if defined(__GNUC__)
@@ -227,7 +227,7 @@ struct CreatureBaseStats
     static CreatureBaseStats const* GetBaseStats(uint8 level, uint8 unitClass);
 };
 
-typedef UNORDERED_MAP<uint16, CreatureBaseStats> CreatureBaseStatsContainer;
+typedef std::unordered_map<uint16, CreatureBaseStats> CreatureBaseStatsContainer;
 
 struct CreatureLocale
 {
@@ -252,8 +252,8 @@ struct EquipmentInfo
 };
 
 // Benchmarked: Faster than std::map (insert/find)
-typedef UNORDERED_MAP<uint8, EquipmentInfo> EquipmentInfoContainerInternal;
-typedef UNORDERED_MAP<uint32, EquipmentInfoContainerInternal> EquipmentInfoContainer;
+typedef std::unordered_map<uint8, EquipmentInfo> EquipmentInfoContainerInternal;
+typedef std::unordered_map<uint32, EquipmentInfoContainerInternal> EquipmentInfoContainer;
 
 // from `creature` table
 struct CreatureData
@@ -293,7 +293,7 @@ struct CreatureModelInfo
 };
 
 // Benchmarked: Faster than std::map (insert/find)
-typedef UNORDERED_MAP<uint16, CreatureModelInfo> CreatureModelContainer;
+typedef std::unordered_map<uint16, CreatureModelInfo> CreatureModelContainer;
 
 enum InhabitTypeValues
 {
@@ -334,7 +334,7 @@ struct CreatureAddon
     std::vector<uint32> auras;
 };
 
-typedef UNORDERED_MAP<uint32, CreatureAddon> CreatureAddonContainer;
+typedef std::unordered_map<uint32, CreatureAddon> CreatureAddonContainer;
 
 // Vendors
 struct VendorItem
@@ -411,7 +411,7 @@ struct TrainerSpell
     bool IsCastable() const { return learnedSpell[0] != spell; }
 };
 
-typedef UNORDERED_MAP<uint32 /*spellid*/, TrainerSpell> TrainerSpellMap;
+typedef std::unordered_map<uint32 /*spellid*/, TrainerSpell> TrainerSpellMap;
 
 struct TrainerSpellData
 {
@@ -447,6 +447,9 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
 
         void SetObjectScale(float scale);
         void SetDisplayId(uint32 modelId);
+
+        void SetOutfit(int32 outfit) { outfitId = outfit; };
+        int32 GetOutfit() const { return outfitId; };
 
         void DisappearAndDie();
 
@@ -688,47 +691,76 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
         void SetTextRepeatId(uint8 textGroup, uint8 id);
         void ClearTextRepeatGroup(uint8 textGroup);
 
-        // npc_bot commands
-        //misc
-            uint32 GetBlockPercent() const;
-        
-        Player* GetBotOwner() const { return m_bot_owner; }
-        void SetBotOwner(Player* newowner) { m_bot_owner = newowner; }
+        //Bot commands
+        bool LoadBotCreatureFromDB(uint32 guid, Map* map, bool addToMap = true);
+        Player* GetBotOwner() const;
+        void SetBotOwner(Player* newowner);
         Creature* GetCreatureOwner() const { return m_creature_owner; }
         void SetCreatureOwner(Creature* newCreOwner) { m_creature_owner = newCreOwner; }
         Creature* GetBotsPet() const { return m_bots_pet; }
         void SetBotsPetDied();
         void SetBotsPet(Creature* newpet) { /*ASSERT (!m_bots_pet);*/ m_bots_pet = newpet; }
+        bool IsNPCBot() const;
+        bool IsFreeBot() const;
         void SetIAmABot(bool bot = true);
         bool GetIAmABot() const;
         bool GetIAmABotsPet() const;
-        void SetBotClass(uint8 myclass) { m_bot_class = myclass; }
         uint8 GetBotClass() const;
-        void SetBotTank(Unit* newtank);
+        uint8 GetBotRoles() const;
         bot_ai* GetBotAI() const { return bot_AI; }
         bot_minion_ai* GetBotMinionAI() const;
         bot_pet_ai* GetBotPetAI() const;
-        void InitBotAI(bool asPet = false);
+        void SetBotAI(bot_ai* ai) { bot_AI = ai; }
         void SetBotCommandState(CommandStates st, bool force = false);
         CommandStates GetBotCommandState() const;
         void ApplyBotDamageMultiplierMelee(uint32& damage, CalcDamageInfo& damageinfo) const;
         void ApplyBotDamageMultiplierMelee(int32& damage, SpellNonMeleeDamage& damageinfo, SpellInfo const* spellInfo, WeaponAttackType attackType, bool& crit) const;
         void ApplyBotDamageMultiplierSpell(int32& damage, SpellNonMeleeDamage& damageinfo, SpellInfo const* spellInfo, WeaponAttackType attackType, bool& crit) const;
-        void ApplyBotDamageMultiplierEffect(SpellInfo const* spellInfo, uint8 effect_index, float &value) const;
+        void ApplyBotDamageMultiplierHeal(Unit const* victim, float& heal, SpellInfo const* spellInfo, DamageEffectType damagetype, uint32 stack) const;
+        void ApplyBotCritMultiplierAll(Unit const* victim, float& crit_chance, SpellInfo const* spellInfo, SpellSchoolMask schoolMask, WeaponAttackType attackType) const;
+        void ApplyCreatureSpellCostMods(SpellInfo const* spellInfo, int32& cost) const;
+        void ApplyCreatureSpellCastTimeMods(SpellInfo const* spellInfo, int32& casttime) const;
         void SetBotShouldUpdateStats();
         void OnBotSummon(Creature* summon);
         void OnBotDespawn(Creature* summon);
         void SetCanUpdate(bool can) { m_canUpdate = can; }
-        void RemoveBotItemBonuses(uint8 slot);
-        void ApplyBotItemBonuses(uint8 slot);
-        bool CanUseOffHand() const;
-        bool CanUseRanged() const;
-        bool CanEquip(ItemTemplate const* item, uint8 slot) const;
-        bool Unequip(uint8 slot) const;
-        bool Equip(uint32 itemId, uint8 slot) const;
-        bool ResetEquipment(uint8 slot) const;
-        // npc_bot commands
-        
+        void KillEvents(bool force);
+        void BotStopMovement();
+        void ResetBotAI(uint8 resetType = 0);
+
+        bool CanParry() const;
+        bool CanDodge() const;
+        bool CanBlock() const;
+        bool CanCrit() const;
+        bool CanMiss() const;
+
+        float GetCreatureParryChance() const;
+        float GetCreatureDodgeChance() const;
+        float GetCreatureBlockChance() const;
+        float GetCreatureCritChance() const;
+        float GetCreatureMissChance() const;
+        float GetCreatureEvasion() const;
+        float GetCreatureArmorPenetrationCoef() const;
+        float GetCreatureDamageTakenMod() const;
+        uint32 GetCreatureExpertise() const;
+        uint32 GetCreatureSpellPenetration() const;
+        uint32 GetCreatureSpellPower() const;
+
+        bool IsCreatureImmuneToSpell(SpellInfo const* spellInfo) const;
+        bool IsTempBot() const;
+
+        MeleeHitOutcome BotRollMeleeOutcomeAgainst(Unit const* victim, WeaponAttackType attType) const;
+
+        void CastCreatureItemCombatSpell(Unit* target, WeaponAttackType attType, uint32 procVictim, uint32 procEx, Spell const* spell = NULL);
+
+        void OnSpellGo(Spell const* spell);
+        void AddBotSpellCooldown(uint32 spellId, uint32 cooldown);
+
+        static bool IsBotCustomSpell(uint32 spellId);
+        //advanced
+        bool IsQuestBot() const;
+        //End Bot commands
+
     protected:
         bool CreateFromProto(uint32 guidlow, uint32 Entry, uint32 vehId, uint32 team, const CreatureData* data = NULL);
         bool InitEntry(uint32 entry, uint32 team=ALLIANCE, const CreatureData* data=NULL);
@@ -779,14 +811,13 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
         bool CanAlwaysSee(WorldObject const* obj) const;
         uint64 uiSeerGUID;
     private:
-        // npc_bot system
-        Player* m_bot_owner;
+        //bot system
         Creature* m_creature_owner;
         Creature* m_bots_pet;
         bot_ai* bot_AI;
-        uint8 m_bot_class;
         bool m_canUpdate;
-        //end npc_bot system
+        //end bot system
+
         void ForcedDespawn(uint32 timeMSToDespawn = 0);
 
         //WaypointMovementGenerator vars
@@ -798,6 +829,8 @@ class Creature : public Unit, public GridObject<Creature>, public MapObject
         bool TriggerJustRespawned;
 
         Spell const* _focusSpell;   ///> Locks the target during spell cast for proper facing
+
+        int32 outfitId;
 
         CreatureTextRepeatGroup m_textRepeat;
 };

@@ -1,4 +1,5 @@
 #include "bot_ai.h"
+#include "botmgr.h"
 #include "Group.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -23,7 +24,6 @@ struct TotemParam
     Position pos;
     float effradius;
 };
-typedef std::pair<uint64 /*guid*/, TotemParam /*param*/> BotTotem;
 class shaman_bot : public CreatureScript
 {
 public:
@@ -36,7 +36,7 @@ public:
 
     bool OnGossipHello(Player* player, Creature* creature)
     {
-        return bot_minion_ai::OnGossipHello(player, creature);
+        return bot_minion_ai::OnGossipHello(player, creature, 0);
     }
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action)
@@ -46,24 +46,31 @@ public:
         return true;
     }
 
+    bool OnGossipSelectCode(Player* player, Creature* creature, uint32 sender, uint32 action, char const* code)
+    {
+        if (bot_minion_ai* ai = creature->GetBotMinionAI())
+            return ai->OnGossipSelectCode(player, creature, sender, action, code);
+        return true;
+    }
+
     struct shaman_botAI : public bot_minion_ai
     {
         shaman_botAI(Creature* creature) : bot_minion_ai(creature)
         {
-            Reset();
+            _botclass = BOT_CLASS_SHAMAN;
         }
 
         bool doCast(Unit* victim, uint32 spellId, bool triggered = false)
         {
-            if (checkBotCast(victim, spellId, CLASS_SHAMAN) != SPELL_CAST_OK)
+            if (CheckBotCast(victim, spellId, BOT_CLASS_SHAMAN) != SPELL_CAST_OK)
                 return false;
 
             bool maelstrom = false;
             if (!triggered)
                 maelstrom = (MaelstromCount >= 5 &&
-                (spellId == LIGHTNING_BOLT || spellId == CHAIN_LIGHTNING ||
-                spellId == HEALING_WAVE || spellId == LESSER_HEALING_WAVE ||
-                spellId == CHAIN_HEAL || spellId == HEX));
+                (spellId == GetSpell(LIGHTNING_BOLT_1) || spellId == GetSpell(CHAIN_LIGHTNING_1) ||
+                spellId == GetSpell(HEALING_WAVE_1) || spellId == GetSpell(LESSER_HEALING_WAVE_1) ||
+                spellId == GetSpell(CHAIN_HEAL_1) || spellId == GetSpell(HEX_1)));
 
             triggered |= maelstrom;
 
@@ -72,7 +79,7 @@ public:
             if (result && maelstrom)
             {
                 MaelstromCount = 0;
-                me->RemoveAurasDueToSpell(MAELSTROM_WEAPON_BUFF, 0, 0, AURA_REMOVE_BY_EXPIRE);
+                me->RemoveAurasDueToSpell(MAELSTROM_WEAPON_BUFF, NULL, 0, AURA_REMOVE_BY_EXPIRE);
             }
 
             return result;
@@ -82,17 +89,18 @@ public:
         {
             if (GetBotCommandState() == COMMAND_ATTACK && !force) return;
             Aggro(u);
-            GetInPosition(force, !isTwoHander());
             SetBotCommandState(COMMAND_ATTACK);
+            OnStartAttack(u);
+            GetInPosition(force);
         }
 
-        void EnterCombat(Unit*) { }
+        void EnterCombat(Unit* u) { bot_minion_ai::EnterCombat(u); }
         void Aggro(Unit*) { }
         void AttackStart(Unit*) { }
         void KilledUnit(Unit*) { }
-        void EnterEvadeMode() { }
-        void MoveInLineOfSight(Unit*) { }
-        void JustDied(Unit*) { master->SetNpcBotDied(me->GetGUID()); }
+        void EnterEvadeMode() { bot_minion_ai::EnterEvadeMode(); }
+        void MoveInLineOfSight(Unit* u) { bot_minion_ai::MoveInLineOfSight(u); }
+        void JustDied(Unit* u) { bot_minion_ai::JustDied(u); }
 
         bool Shielded(Unit* target) const
         {
@@ -104,13 +112,14 @@ public:
 
         void CheckBloodlust(uint32 diff)
         {
-            if (!BLOODLUST || Bloodlust_Timer > diff || me->GetDistance(master) > 18 || IsCasting() || Rand() > 15)
+            if (!IsSpellReady(BLOODLUST_1, diff, false) || me->GetDistance(master) > 18 || IsCasting() || Rand() > 15)
                 return;
             if (!me->IsInCombat() || !master->IsInCombat())
                 return;
-            if (HasAuraName(master, BLOODLUST))
+
+            if (HasAuraName(master, BLOODLUST_1))
             {
-                Bloodlust_Timer += 3000;
+                SetSpellCooldown(BLOODLUST_1, 3000); //fail
                 return;
             }
 
@@ -122,16 +131,16 @@ public:
                     me->getAttackers().size() + master->getAttackers().size() > 5)
                 {
                     temptimer = GC_Timer;
-                    if (doCast(me, BLOODLUST))
+                    if (doCast(me, GetSpell(BLOODLUST_1)))
                     {
+                        SetSpellCooldown(BLOODLUST_1, 300000); //5 minutes
                         GC_Timer = temptimer;
-                        Bloodlust_Timer = 180000; //3 min
                         return;
                     }
                 }
             }
 
-            Bloodlust_Timer = 2000; //fail
+            SetSpellCooldown(BLOODLUST_1, 2000); //fail
         }
 
         void CheckTotems(uint32 diff)
@@ -142,7 +151,7 @@ public:
             //Unsummon
             for (uint8 i = 0; i != MAX_TOTEMS; ++i)
             {
-                if (_totems[i].first != 0)
+                if (_totems[i].first)
                 {
                     if (master->GetDistance2d(_totems[i].second.pos.m_positionX, _totems[i].second.pos.m_positionY) > _totems[i].second.effradius &&
                         me->GetDistance2d(_totems[i].second.pos.m_positionX, _totems[i].second.pos.m_positionY) > _totems[i].second.effradius)
@@ -165,10 +174,10 @@ public:
             //TODO: role-based totems (attack/heal)
             if (me->IsInCombat())
             {
-                if (WINDFURY_TOTEM && !_totems[T_AIR].first && !master->m_SummonSlot[T_AIR+1])
+                if (GetSpell(WINDFURY_TOTEM_1) && !_totems[T_AIR].first && !master->m_SummonSlot[T_AIR+1])
                 {
                     temptimer = GC_Timer;
-                    if (doCast(me, WINDFURY_TOTEM))
+                    if (doCast(me, GetSpell(WINDFURY_TOTEM_1)))
                     {
                         if (me->getLevel() >= 57)
                             GC_Timer = temptimer;
@@ -178,20 +187,20 @@ public:
 
                 if (!_totems[T_EARTH].first && !master->m_SummonSlot[T_EARTH+1])
                 {
-                    if (STRENGTH_OF_EARTH_TOTEM)
+                    if (GetSpell(STRENGTH_OF_EARTH_TOTEM_1))
                     {
                         temptimer = GC_Timer;
-                        if (doCast(me, STRENGTH_OF_EARTH_TOTEM))
+                        if (doCast(me, GetSpell(STRENGTH_OF_EARTH_TOTEM_1)))
                         {
                             if (me->getLevel() >= 57)
                                 GC_Timer = temptimer;
                             return;
                         }
                     }
-                    else if (STONESKIN_TOTEM)
+                    else if (GetSpell(STONESKIN_TOTEM_1))
                     {
                         temptimer = GC_Timer;
-                        if (doCast(me, STONESKIN_TOTEM))
+                        if (doCast(me, GetSpell(STONESKIN_TOTEM_1)))
                         {
                             if (me->getLevel() >= 57)
                                 GC_Timer = temptimer;
@@ -202,28 +211,27 @@ public:
 
                 if (!_totems[T_FIRE].first && !master->m_SummonSlot[T_FIRE+1])
                 {
-                    if (TOTEM_OF_WRATH && Totem_of_Wrath_Timer <= diff)
+                    if (IsSpellReady(TOTEM_OF_WRATH_1, diff, false))
                     {
                         temptimer = GC_Timer;
-                        if (doCast(me, TOTEM_OF_WRATH))
+                        if (doCast(me, GetSpell(TOTEM_OF_WRATH_1)))
                         {
                             //bot's poor AI cannot use totems wisely so just reduce CD on this
-                            Totem_of_Wrath_Timer = 30000; //30 sec, old 5 min
+                            //SetSpellCooldown(TOTEM_OF_WRATH_1, 30000); //30 sec, old 5 min
                             if (me->getLevel() >= 57)
                                 GC_Timer = temptimer;
                             return;
                         }
                     }
-                    else if (SEARING_TOTEM && Searing_Totem_Timer <= diff)
+                    else if (IsSpellReady(SEARING_TOTEM_1, diff, false))
                     {
                         if (Unit* u = me->GetVictim())
                         {
-                            if (me->GetExactDist(u) < (u->isMoving() ? 10 : 25))
+                            if (HasRole(BOT_ROLE_DPS) && me->GetExactDist(u) < (u->isMoving() ? 10 : 25))
                             {
                                 temptimer = GC_Timer;
-                                if (doCast(me, SEARING_TOTEM))
+                                if (doCast(me, GetSpell(SEARING_TOTEM_1)))
                                 {
-                                    Searing_Totem_Timer = 20000;
                                     if (me->getLevel() >= 57)
                                         GC_Timer = temptimer;
                                     return;
@@ -239,20 +247,20 @@ public:
                 {
                     uint8 manapct = GetManaPCT(master);
                     uint8 hppct = GetHealthPCT(master);
-                    if (HEALINGSTREAM_TOTEM && hppct < 98 && master->getPowerType() != POWER_MANA &&
+                    if (GetSpell(HEALINGSTREAM_TOTEM_1) && hppct < 98 && master->getPowerType() != POWER_MANA &&
                         (hppct < 25 || manapct > hppct))
                     {
                         temptimer = GC_Timer;
-                        if (doCast(me, HEALINGSTREAM_TOTEM))
+                        if (doCast(me, GetSpell(HEALINGSTREAM_TOTEM_1)))
                         {
                             GC_Timer = temptimer;
                             return;
                         }
                     }
-                    else if (MANASPRING_TOTEM && (manapct < 97 || GetManaPCT(me) < 90))
+                    else if (GetSpell(MANASPRING_TOTEM_1) && (manapct < 97 || GetManaPCT(me) < 90))
                     {
                         temptimer = GC_Timer;
-                        if (doCast(me, MANASPRING_TOTEM))
+                        if (doCast(me, GetSpell(MANASPRING_TOTEM_1)))
                         {
                             GC_Timer = temptimer;
                             return;
@@ -264,23 +272,20 @@ public:
 
         void CheckThunderStorm(uint32 diff)
         {
-            if (!THUNDERSTORM || Thunderstorm_Timer > diff || IsCasting() || Rand() > 25)
+            if (!IsSpellReady(THUNDERSTORM_1, diff, false) || !HasRole(BOT_ROLE_DPS) || IsCasting() || Rand() > 25)
                 return;
 
             //case 1: low mana
             if (GetManaPCT(me) < 15)
             {
                 temptimer = GC_Timer;
-                if (doCast(me, THUNDERSTORM))
-                {
+                if (doCast(me, GetSpell(THUNDERSTORM_1)))
                     GC_Timer = temptimer;
-                    Thunderstorm_Timer = 25000; //45 - 20 = 25 sec for mana restore
-                }
                 return;
             }
 
             //case 2: knock attackers
-            if (tank == me) //pretty stupid idea I think
+            if (IsTank()) //pretty stupid idea I think
                 return;
 
             //AttackerSet m_attackers = master->getAttackers();
@@ -304,18 +309,15 @@ public:
             if (tCount > 0)
             {
                 temptimer = GC_Timer;
-                if (doCast(me, THUNDERSTORM))
-                {
+                if (doCast(me, GetSpell(THUNDERSTORM_1)))
                     GC_Timer = temptimer;
-                    Thunderstorm_Timer = 40000; //45 - 5 = 40 sec for knock
-                }
                 return;
             }
         }
 
         void CheckManaTide(uint32 diff)
         {
-            if (!MANA_TIDE_TOTEM || Mana_Tide_Totem_Timer > diff || IsCasting() || Rand() > 20)
+            if (!IsSpellReady(MANA_TIDE_TOTEM_1, diff, false) || IAmFree() || IsCasting() || Rand() > 20)
                 return;
 
             Group* group = master->GetGroup();
@@ -338,9 +340,10 @@ public:
                 }
                 if (tPlayer->HaveBot())
                 {
-                    for (uint8 i = 0; i != tPlayer->GetMaxNpcBots(); ++i)
+                    BotMap const* map = tPlayer->GetBotMgr()->GetBotMap();
+                    for (BotMap::const_iterator it = map->begin(); it != map->end(); ++it)
                     {
-                        Creature* bot = tPlayer->GetBotMap(i)->_Cre();
+                        Creature* bot = it->second;
                         if (bot && bot->IsInWorld() && bot->getPowerType() == POWER_MANA &&
                             bot->GetExactDist(me) < 20 && GetManaPCT(bot) < 35)
                         {
@@ -353,7 +356,7 @@ public:
 
             if (LMPcount > 3 || LMPcount > members / 3)
             {
-                if (_totems[T_WATER].first != 0)
+                if (_totems[T_WATER].first)
                 {
                     Unit* to = sObjectAccessor->FindUnit(_totems[T_WATER].first);
                     if (!to)
@@ -361,27 +364,19 @@ public:
                     else
                         to->ToTotem()->UnSummon();
                 }
-                if (doCast(me, MANA_TIDE_TOTEM))
-                {
-                    Mana_Tide_Totem_Timer = 60000; //1 min
+                if (doCast(me, GetSpell(MANA_TIDE_TOTEM_1)))
                     return;
-                }
             }
 
-            Mana_Tide_Totem_Timer = 3000; //fail
+            SetSpellCooldown(MANA_TIDE_TOTEM_1, 3000); //fail
         }
 
         void UpdateAI(uint32 diff)
         {
             ReduceCD(diff);
-            if (IAmDead()) return;
-            if (me->GetVictim())
-            {
-                if (isTwoHander())
-                    DoMeleeAttackIfReady();
-            }
-            else
-                Evade();
+            if (!GlobalUpdate(diff))
+                return;
+            CheckAttackState();
             CheckAuras();
             if (wait == 0)
                 wait = GetWait();
@@ -394,7 +389,7 @@ public:
             CheckHexy(diff);
             CheckEarthy(diff);
 
-            if (GetManaPCT(me) < 30 && Potion_cd <= diff)
+            if (Potion_cd <= diff && GetManaPCT(me) < 30)
             {
                 temptimer = GC_Timer;
                 if (doCast(me, MANAPOTION))
@@ -416,17 +411,17 @@ public:
             if (!me->IsInCombat())
                 DoNonCombatActions(diff);
             //buff myself
-            if (LIGHTNING_SHIELD && tank != me && !Shielded(me))
+            if (GetSpell(LIGHTNING_SHIELD_1) && !IsTank() && !Shielded(me))
             {
                 temptimer = GC_Timer;
-                if (doCast(me, LIGHTNING_SHIELD))
+                if (doCast(me, GetSpell(LIGHTNING_SHIELD_1)))
                     GC_Timer = temptimer;
             }
             //heal myself
             if (GetHealthPCT(me) < 80)
                 HealTarget(me, GetHealthPCT(me), diff);
 
-            if (!CheckAttackTarget(CLASS_SHAMAN))
+            if (!CheckAttackTarget(BOT_CLASS_SHAMAN))
                 return;
 
             CheckHexy2(diff);
@@ -437,7 +432,7 @@ public:
 
         void Counter(uint32 diff)
         {
-            if (!WIND_SHEAR || Wind_Shear_Timer > diff || Rand() > 60)
+            if (!IsSpellReady(WIND_SHEAR_1, diff, false) || Rand() > 60)
                 return;
 
             Unit* u = me->GetVictim();
@@ -446,9 +441,9 @@ public:
                 temptimer = GC_Timer;
                 if (me->IsNonMeleeSpellCast(false))
                     me->InterruptNonMeleeSpells(false);
-                if (doCast(u, WIND_SHEAR))
+                if (doCast(u, GetSpell(WIND_SHEAR_1)))
                 {
-                    Wind_Shear_Timer = 5000; //improved
+                    SetSpellCooldown(WIND_SHEAR_1, 5000); //improved
                     GC_Timer = temptimer;
                 }
             }
@@ -457,11 +452,8 @@ public:
                 temptimer = GC_Timer;
                 if (me->IsNonMeleeSpellCast(false))
                     me->InterruptNonMeleeSpells(false);
-                if (doCast(target, WIND_SHEAR))
-                {
-                    Wind_Shear_Timer = 5000;
+                if (doCast(target, GetSpell(WIND_SHEAR_1)))
                     GC_Timer = temptimer;
-                }
             }
         }
 
@@ -489,47 +481,41 @@ public:
             if (IsCasting()) return;
 
             //STORMSTRIKE
-            if (STORMSTRIKE && isTwoHander() && Stormstrike_Timer <= diff && GC_Timer <= diff &&
-                meleedist <= 5 && Rand() < 70)
+            if (IsSpellReady(STORMSTRIKE_1, diff) && HasRole(BOT_ROLE_DPS) && meleedist <= 5 && IsMelee() && Rand() < 70)
             {
-                if (doCast(opponent, STORMSTRIKE))
-                {
-                    Stormstrike_Timer = 6000; //improved
+                if (doCast(opponent, GetSpell(STORMSTRIKE_1)))
                     return;
-                }
             }
             //SHOCKS
-            if ((FLAME_SHOCK || EARTH_SHOCK || FROST_SHOCK) && Shock_Timer <= diff && GC_Timer <= diff &&
-                dist < 25 && Rand() < 30)
+            if ((GetSpell(FLAME_SHOCK_1) || GetSpell(EARTH_SHOCK_1) || GetSpell(FROST_SHOCK_1)) &&
+                IsSpellReady(FLAME_SHOCK_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 25 && Rand() < 30)
             {
                 temptimer = GC_Timer;
 
-                bool canFlameShock = (FLAME_SHOCK != 0);
+                bool canFlameShock = (GetSpell(FLAME_SHOCK_1) != 0);
                 if (canFlameShock)
                 {
-                    if (Aura* fsh = opponent->GetAura(FLAME_SHOCK, me->GetGUID()))
+                    if (Aura* fsh = opponent->GetAura(GetSpell(FLAME_SHOCK_1), me->GetGUID()))
                         if (fsh->GetDuration() > 3000)
                             canFlameShock = false;
                 }
 
                 if (canFlameShock)
                 {
-                    if (doCast(opponent, FLAME_SHOCK))
+                    if (doCast(opponent, GetSpell(FLAME_SHOCK_1)))
                     {
-                        Shock_Timer = 3000; //improved twice
                         GC_Timer = temptimer;
                         return;
                     }
                 }
-                else if (EARTH_SHOCK || FROST_SHOCK)
+                else if (GetSpell(EARTH_SHOCK_1) || GetSpell(FROST_SHOCK_1))
                 {
-                    uint32 SHOCK = !FROST_SHOCK ? EARTH_SHOCK : RAND(EARTH_SHOCK, FROST_SHOCK);
+                    uint32 SHOCK = !GetSpell(FROST_SHOCK_1) ? GetSpell(EARTH_SHOCK_1) : RAND(GetSpell(EARTH_SHOCK_1), GetSpell(FROST_SHOCK_1));
                     if (SHOCK && !opponent->HasAuraWithMechanic((1<<MECHANIC_SNARE)|(1<<MECHANIC_ROOT)) &&
                         !opponent->HasAura(SHOCK))
                     {
                         if (doCast(opponent, SHOCK))
                         {
-                            Shock_Timer = 3000; //improved twice
                             GC_Timer = temptimer;
                             return;
                         }
@@ -537,57 +523,48 @@ public:
                 }
             }
             //LAVA BURST
-            if (LAVA_BURST && Lava_Burst_Timer <= diff && GC_Timer <= diff && dist < 30 && Rand() < 50)
+            if (IsSpellReady(LAVA_BURST_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 50)
             {
-                if (doCast(opponent, LAVA_BURST))
-                {
-                    Lava_Burst_Timer = 8000;
+                if (doCast(opponent, GetSpell(LAVA_BURST_1)))
                     return;
-                }
             }
 
-            if (GetManaPCT(me) < 15 || (isTwoHander() && MaelstromCount < 5))
+            if (GetManaPCT(me) < 15 || (MaelstromCount < 5 && IsMelee()))
                 return;
 
             //CHAIN LIGHTNING
-            if (CHAIN_LIGHTNING && Chain_Lightning_Timer <= diff && GC_Timer <= diff && dist < 30 && Rand() < 80)
+            if (IsSpellReady(CHAIN_LIGHTNING_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30 && Rand() < 80)
             {
-                if (doCast(opponent, CHAIN_LIGHTNING))
-                {
-                    Chain_Lightning_Timer = 3500; //improved
+                if (doCast(opponent, GetSpell(CHAIN_LIGHTNING_1)))
                     return;
-                }
             }
             //LIGHTNING BOLT
-            if (LIGHTNING_BOLT && Lightning_Bolt_Timer <= diff && GC_Timer <= diff && dist < 20)
+            if (IsSpellReady(LIGHTNING_BOLT_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 30)
             {
+                uint32 LIGHTNING_BOLT = GetSpell(LIGHTNING_BOLT_1);
                 if (doCast(opponent, LIGHTNING_BOLT))
-                {
-                    Lightning_Bolt_Timer = uint32(float(sSpellMgr->GetSpellInfo(LIGHTNING_BOLT)->CalcCastTime()/100) * me->GetFloatValue(UNIT_MOD_CAST_SPEED) + 200);
                     return;
-                }
             }
         }
 
         void CheckHexy(uint32 diff)
         {
-            if (HexyCheckTimer <= diff && HEX)
+            if (HexyCheckTimer <= diff)
             {
-                Hexy = FindAffectedTarget(HEX, me->GetGUID());
+                Hexy = FindAffectedTarget(GetSpell(HEX_1), me->GetGUID());
                 HexyCheckTimer = 2000;
             }
         }
 
         void CheckHexy2(uint32 diff)
         {
-            if (HEX && Hexy == false && Hex_Timer < diff && me->GetVictim())
+            if (Hexy == false && me->GetVictim() && IsSpellReady(HEX_1, diff, false))
             {
                 if (Unit* target = FindPolyTarget(20, me->GetVictim()))
                 {
-                    if (doCast(target, HEX))
+                    if (doCast(target, GetSpell(HEX_1)))
                     {
                         Hexy = true;
-                        Hex_Timer = 30000; //45 - 15 = 30 sec for bots
                         HexyCheckTimer += 2000;
                     }
                 }
@@ -596,36 +573,37 @@ public:
 
         void CheckEarthy(uint32 diff)
         {
-            if (EarthyCheckTimer <= diff && EARTH_SHIELD)
+            if (EarthyCheckTimer <= diff)
             {
-                Unit* u = FindAffectedTarget(EARTH_SHIELD, me->GetGUID(), 90.f, 2);
-                Earthy = (u && (u == tank || u == master));
+                Unit* u = FindAffectedTarget(GetSpell(EARTH_SHIELD_1), me->GetGUID(), 90.f, 3);
+                Earthy = (u && (IsTank(u) || u == master));
                 EarthyCheckTimer = 1000;
             }
         }
 
         void DoNonCombatActions(uint32 diff)
         {
-            if (GC_Timer > diff || Rand() > 50 || me->IsMounted()) return;
+            if (GC_Timer > diff || me->IsMounted() || IsCasting())
+                return;
 
-            RezGroup(ANCESTRAL_SPIRIT, master);
+            RezGroup(GetSpell(ANCESTRAL_SPIRIT_1), master);
 
             if (Feasting()) return;
 
             if (Shielded(me) && Rand() < 25)
             {
                 Aura* shield = NULL;
-                uint32 SHIELD = LIGHTNING_SHIELD;
+                uint32 SHIELD = HasRole(BOT_ROLE_DPS) ? GetSpell(LIGHTNING_SHIELD_1) : 0;
                 if (SHIELD)
                     shield = me->GetAura(SHIELD);
-                if (!shield && EARTH_SHIELD && tank == me)
+                if (!shield && IsTank() && GetSpell(EARTH_SHIELD_1))
                 {
-                    SHIELD = EARTH_SHIELD;
+                    SHIELD = GetSpell(EARTH_SHIELD_1);
                     shield = me->GetAura(SHIELD);
                 }
-                if (!shield && WATER_SHIELD)
+                if (!shield && GetSpell(WATER_SHIELD_1))
                 {
-                    SHIELD = WATER_SHIELD;
+                    SHIELD = GetSpell(WATER_SHIELD_1);
                     shield = me->GetAura(SHIELD);
                 }
                 if (shield && shield->GetCharges() < 5)
@@ -642,21 +620,22 @@ public:
 
         bool BuffTarget(Unit* target, uint32 diff)
         {
-            if (!WATER_WALKING && !WATER_BREATHING && !EARTH_SHIELD)
+            if (!GetSpell(WATER_WALKING_1) && !GetSpell(WATER_BREATHING_1) && !GetSpell(EARTH_SHIELD_1))
                 return false;
 
-            if (GC_Timer > diff || !target || !target->IsAlive() || Rand() > 40) return false;
-            
-            if (EARTH_SHIELD && Earthy == false && ((!tank && target == master) || target == tank) &&
+            if (GC_Timer > diff || !target || !target->IsAlive() || Rand() > 40)
+                return false;
+
+            if (GetSpell(EARTH_SHIELD_1) && Earthy == false && (target == master || IsTank(target)) &&
                 (target->IsInCombat() || !target->isMoving()) &&
                 me->GetExactDist(target) < 40 && Rand() < 75)
             {
                 bool cast = !Shielded(target);
                 if (!cast)
-                    if (Aura* eShield = target->GetAura(EARTH_SHIELD))
+                    if (Aura* eShield = target->GetAura(GetSpell(EARTH_SHIELD_1)))
                         if (eShield->GetCharges() < 5)
                             cast = true;
-                if (cast && doCast(target, EARTH_SHIELD))
+                if (cast && doCast(target, GetSpell(EARTH_SHIELD_1)))
                 {
                     Earthy = true;
                     //GC_Timer = 800;
@@ -670,17 +649,17 @@ public:
             if (target->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING))
             {
                 //bots don't need water breathing
-                if (WATER_BREATHING && target->GetTypeId() == TYPEID_PLAYER &&
+                if (GetSpell(WATER_BREATHING_1) && target->GetTypeId() == TYPEID_PLAYER &&
                     !target->HasAuraType(SPELL_AURA_WATER_BREATHING) &&
-                    doCast(target, WATER_BREATHING))
+                    doCast(target, GetSpell(WATER_BREATHING_1)))
                 {
                     //GC_Timer = 800;
                     return true;
                 }
                 //water walking breaks on any damage
-                if (WATER_WALKING && target->getAttackers().empty() &&
+                if (GetSpell(WATER_WALKING_1) && target->getAttackers().empty() &&
                     !target->HasAuraType(SPELL_AURA_WATER_WALK) &&
-                    doCast(target, WATER_WALKING))
+                    doCast(target, GetSpell(WATER_WALKING_1)))
                 {
                     //GC_Timer = 800;
                     return true;
@@ -691,19 +670,20 @@ public:
 
         void CheckDispel(uint32 diff)
         {
-            if (!PURGE || CheckDispelTimer > diff || Rand() > 35 || IsCasting())
+            if (!IsSpellReady(PURGE_1, diff, false) || IsCasting() || Rand() > 35)
                 return;
+
             Unit* target = FindHostileDispelTarget();
-            if (target && doCast(target, PURGE))
-            {
-                CheckDispelTimer = 3000;
-                GC_Timer = 500;
-            }
-            CheckDispelTimer = 1000;
+            if (target && doCast(target, GetSpell(PURGE_1)))
+            {}
+
+            SetSpellCooldown(PURGE_1, 2000); //fail
         }
 
         bool HealTarget(Unit* target, uint8 hp, uint32 diff)
         {
+            if (!HasRole(BOT_ROLE_HEAL))
+                return false;
             if (hp > 97)
                 return false;
             if (!target || !target->IsAlive() || me->GetExactDist(target) > 40)
@@ -715,41 +695,42 @@ public:
 
             if (IsCasting()) return false;
 
-            if (LESSER_HEALING_WAVE && ((hp > 70 && hp < 85) || hp < 50 || GetLostHP(target) > 1800) && GC_Timer <= diff &&
-                Rand() < 75)
+            if (IsSpellReady(LESSER_HEALING_WAVE_1, diff) &&
+                ((hp > 70 && hp < 85) || hp < 50 || GetLostHP(target) > 1800) && Rand() < 75)
             {
-                if (doCast(target, LESSER_HEALING_WAVE))
+                if (doCast(target, GetSpell(LESSER_HEALING_WAVE_1)))
                     return true;
             }
-            if (HEALING_WAVE && hp > 40 && (hp < 75 || GetLostHP(target) > 4000) && GC_Timer <= diff &&
-                Rand() < 65)
+            if (IsSpellReady(HEALING_WAVE_1, diff) &&
+                hp > 40 && (hp < 75 || GetLostHP(target) > 4000) && Rand() < 65)
             {
-                if (doCast(target, HEALING_WAVE))
+                if (doCast(target, GetSpell(HEALING_WAVE_1)))
                     return true;
             }
-            if (CHAIN_HEAL && ((hp > 40 && hp < 90) || GetLostHP(target) > 1300) && GC_Timer <= diff &&
-                Rand() < 120)
+            if (IsSpellReady(CHAIN_HEAL_1, diff) &&
+                ((hp > 40 && hp < 90) || GetLostHP(target) > 1300) && Rand() < 120)
             {
-                if (RIPTIDE && Riptide_Timer <= diff && (hp < 85 || GetLostHP(target) > 2500) &&
-                    !target->HasAura(RIPTIDE))
+                if (IsSpellReady(RIPTIDE_1, diff, false) && (hp < 85 || GetLostHP(target) > 2500) &&
+                    !target->HasAura(GetSpell(RIPTIDE_1)))
                 {
                     temptimer = GC_Timer;
-                    if (doCast(target, RIPTIDE, true))
+                    if (doCast(target, GetSpell(RIPTIDE_1), true))
                     {
-                        Riptide_Timer = 5000;
-                        if (doCast(target, CHAIN_HEAL))
+                        if (doCast(target, GetSpell(CHAIN_HEAL_1)))
                         {
                             GC_Timer = temptimer;
                             return true;
                         }
                     }
                 }
-                else if (doCast(target, CHAIN_HEAL))
+                else if (doCast(target, GetSpell(CHAIN_HEAL_1)))
                     return true;
             }
-            
+
             return false;
         }
+
+        void ApplyClassDamageMultiplierMelee(uint32& /*damage*/, CalcDamageInfo& /*damageinfo*/) const {}
 
         void ApplyClassDamageMultiplierMelee(int32& damage, SpellNonMeleeDamage& /*damageinfo*/, SpellInfo const* spellInfo, WeaponAttackType /*attackType*/, bool& crit) const
         {
@@ -800,11 +781,11 @@ public:
             if (!crit)
             {
                 float aftercrit = 0.f;
-                //Call of Thunder: 5% additional critical chance for Lightning Bolt, Chain Lightning and Thunderstorm,
+                //Call of Thunder: 5% additional critical chance for Lightning Bolt, Chain Lightning and Thunderstorm
                 if (lvl >= 30 &&
-                    (spellId == LIGHTNING_BOLT ||
-                    spellId == CHAIN_LIGHTNING ||
-                    spellId == THUNDERSTORM))
+                    (spellId == GetSpell(LIGHTNING_BOLT_1) ||
+                    spellId == GetSpell(CHAIN_LIGHTNING_1) ||
+                    spellId == GetSpell(THUNDERSTORM_1)))
                     aftercrit += 5.f;
                 //Tidal Mastery (part 2): 5% additional critical chance for lightning spells
                 if (lvl >= 25 && (SPELL_SCHOOL_MASK_NATURE & spellInfo->GetSchoolMask()))
@@ -824,40 +805,89 @@ public:
                 if (lvl >= 21)
                     pctbonus += 0.333f;
                 //Lava Flows (part 1): 24% additional crit damage bonus for Lava Burst
-                if (lvl >= 50 && spellId == LAVA_BURST)
+                if (lvl >= 50 && spellId == GetSpell(LAVA_BURST_1))
                     pctbonus += 0.16f;
             }
             //Concussion: 5% bonus damage for Lightning Bolt, Chain Lightning, Thunderstorm, Lava Burst and Shocks
             if (lvl >= 10 &&
-                (spellId == LIGHTNING_BOLT ||
-                spellId == CHAIN_LIGHTNING ||
-                spellId == THUNDERSTORM ||
-                spellId == LAVA_BURST ||
-                spellId == EARTH_SHOCK ||
-                spellId == FROST_SHOCK ||
-                spellId == FLAME_SHOCK))
+                (spellId == GetSpell(LIGHTNING_BOLT_1) ||
+                spellId == GetSpell(CHAIN_LIGHTNING_1) ||
+                spellId == GetSpell(THUNDERSTORM_1) ||
+                spellId == GetSpell(LAVA_BURST_1) ||
+                spellId == GetSpell(EARTH_SHOCK_1) ||
+                spellId == GetSpell(FROST_SHOCK_1) ||
+                spellId == GetSpell(FLAME_SHOCK_1)))
                 pctbonus += 0.05f;
             //Call of Flame (part 2): 6% bonus damage for Lava burst
-            if (lvl >= 15 && spellId == LAVA_BURST)
+            if (lvl >= 15 && spellId == GetSpell(LAVA_BURST_1))
                 pctbonus += 0.06f;
             //Storm, Earth and fire (part 3): 60% bonus damage for Flame Shock (periodic damage in fact but who cares?)
-            if (lvl >= 40 && spellId == FLAME_SHOCK)
+            if (lvl >= 40 && spellId == GetSpell(FLAME_SHOCK_1))
                 pctbonus += 0.6f;
             //Booming Echoes (part 2): 20% bonus damage for Flame Shock and Frost Shock (direct damage)
             if (lvl >= 45 &&
-                (spellId == FLAME_SHOCK ||
-                spellId == FROST_SHOCK))
+                (spellId == GetSpell(FLAME_SHOCK_1) ||
+                spellId == GetSpell(FROST_SHOCK_1)))
                 pctbonus += 0.2f;
-
-            //flat damage mods (temp)
-            ////Shamanism: 25% bonus damage from bonus damage effects for Lightning Bolt, Chain Lightning and Lava Burst
-            //if (lvl >= 55 &&
-            //    (spellId == LIGHTNING_BOLT ||
-            //    spellId == CHAIN_LIGHTNING ||
-            //    spellId == LAVA_BURST))
-            //    fdamage += float(m_spellpower / 4);
+            //Improved Shields (part 1): 15% bonus damage for Lightning Shield orbs
+            if (lvl >= 15 && spellInfo->IsRankOf(sSpellMgr->GetSpellInfo(LIGHTNING_SHIELD_DAMAGE_1)))
+                pctbonus += 0.15f;
 
             damage = int32(fdamage * (1.0f + pctbonus));
+        }
+
+        void ApplyClassDamageMultiplierHeal(Unit const* /*victim*/, float& heal, SpellInfo const* spellInfo, DamageEffectType damagetype, uint32 stack) const
+        {
+            uint32 spellId = spellInfo->Id;
+            uint8 lvl = me->getLevel();
+            float pctbonus = 0.0f;
+            float flat_mod = 0.0f;
+
+            //Healing Way: 25% bonus healing for Healing Wave
+            if (lvl >= 30 && spellId == GetSpell(HEALING_WAVE_1))
+                pctbonus += 0.25f;
+            //Purification: 10% bonus healing for all spells
+            if (lvl >= 35)
+                pctbonus += 0.1f;
+            //Nature's Blessing: 15% of Intellect to healing
+            if (lvl >= 45)
+                flat_mod += me->GetTotalStatValue(STAT_INTELLECT) * 1.0f * me->CalculateDefaultCoefficient(spellInfo, damagetype) * stack * 1.88f * me->CalculateLevelPenalty(spellInfo) * stack;
+            //Improved Chain Heal: 20% bonus healing for Chain Heal
+            if (lvl >= 45 && spellId == GetSpell(CHAIN_HEAL_1))
+                pctbonus += 0.2f;
+            //Improved Earth Shield: 10% bonus healing for Earth Shield
+            //Glyph of Earth Shield: 20% bonus healing for Earth Shield
+            if (lvl >= 50 && spellId == EARTH_SHIELD_HEAL)
+                pctbonus += 0.1f + 0.2f;
+            //Improved Shields (part 3): 15% bonus healing for Earth Shield
+            if (lvl >= 15 && spellId == EARTH_SHIELD_HEAL)
+                pctbonus += 0.15f;
+            //Tidal Waves (part 2): 20% bonus (from spellpower) for Healing Wave and 10% bonus (from spellpower) for Lesser Healing Wave
+            if (lvl >= 55)
+            {
+                if (spellId == GetSpell(HEALING_WAVE_1))
+                    flat_mod += spellpower * 0.2f * me->CalculateDefaultCoefficient(spellInfo, damagetype) * stack * 1.88f * me->CalculateLevelPenalty(spellInfo) * stack;
+                else if (spellId == GetSpell(LESSER_HEALING_WAVE_1))
+                    flat_mod += spellpower * 0.1f * me->CalculateDefaultCoefficient(spellInfo, damagetype) * stack * 1.88f * me->CalculateLevelPenalty(spellInfo) * stack;
+            }
+
+            heal = heal * (1.0f + pctbonus) + flat_mod;
+        }
+
+        void ApplyClassCritMultiplierHeal(Unit const* /*victim*/, float& crit_chance, SpellInfo const* /*spellInfo*/, SpellSchoolMask schoolMask, WeaponAttackType /*attackType*/) const
+        {
+            //uint32 spellId = spellInfo->Id;
+            uint8 lvl = me->getLevel();
+            float aftercrit = 0.0f;
+
+            //Tidal Mastery (part 1): 5% additional critical chance for healing spells
+            if (lvl >= 25 && (schoolMask & SPELL_SCHOOL_MASK_NATURE))
+                aftercrit += 5.f;
+            //Blessing of the Eternals: 4% additional critical chance for all spells
+            if (lvl >= 45)
+                aftercrit += 4.f;
+
+            crit_chance += aftercrit;
         }
 
         void OnBotDespawn(Creature* summon)
@@ -903,7 +933,7 @@ public:
             TempSummon* totem = summon->ToTempSummon();
             if (!totem || !totem->ToTotem())
             {
-                TC_LOG_ERROR("entities.player", "OnBotSummon(): Shaman bot %s has summoned creature %s which is not a temp summon or not a totem...", me->GetName().c_str(), summon->GetName().c_str());
+                //TC_LOG_ERROR("entities.player", "OnBotSummon(): Shaman bot %s has summoned creature %s which is not a temp summon or not a totem...", me->GetName().c_str(), summon->GetName().c_str());
                 return;
             }
 
@@ -976,7 +1006,9 @@ public:
         {
             uint32 spellId = spell->Id;
             //Shields improvement, replaces Static Shock (part 2) and Improved Earth Shield (part 1)
-            if (spellId == LIGHTNING_SHIELD || spellId == EARTH_SHIELD/* || spellId == WATER_SHIELD*/)
+            if (spellId == GetSpell(LIGHTNING_SHIELD_1) ||
+                spellId == GetSpell(EARTH_SHIELD_1)/* ||
+                spellId == GetSpell(WATER_SHIELD_1)*/)
             {
                 if (Aura* shield = target->GetAura(spellId, me->GetGUID()))
                 {
@@ -984,37 +1016,37 @@ public:
                 }
             }
             //Lightning Overload: 20% cast SAME spell with no mana! make sure this does not proc on itself!
-   /*else */if (me->getLevel() >= 40 && (spellId == LIGHTNING_BOLT || spellId == CHAIN_LIGHTNING))
+            if (me->getLevel() >= 40 && (spellId == GetSpell(LIGHTNING_SHIELD_1) || spellId == GetSpell(CHAIN_LIGHTNING_1)))
             {
                 bool cast = (urand(1,100) <= 20);
-                if (spellId == LIGHTNING_BOLT)
+                if (spellId == GetSpell(LIGHTNING_BOLT_1))
                 {
                     if (LOvBolt == false)
                     {
                         if (cast)
                         {
                             LOvBolt = true;
-                            me->CastSpell(target, LIGHTNING_BOLT, true);
+                            me->CastSpell(target, spellId, true);
                         }
                     }
                     else
                         LOvBolt = false;
                 }
-                if (spellId == CHAIN_LIGHTNING)
+                if (spellId == GetSpell(CHAIN_LIGHTNING_1))
                 {
                     if (LOvChain == false)
                     {
                         if (cast)
                         {
                             LOvChain = true;
-                            me->CastSpell(target, CHAIN_LIGHTNING, true);
+                            me->CastSpell(target, spellId, true);
                         }
                     }
                     else
                         LOvChain = false;
                 }
             }
-   /*else */if (spellId == STORMSTRIKE)
+            if (spellId == GetSpell(STORMSTRIKE_1))
             {
                 //Windfury: 10% chance
                 if (WindfuryTimer == 0 && me->getLevel() >= 30)
@@ -1028,7 +1060,7 @@ public:
             }
         }
 
-        void DamageDealt(Unit* victim, uint32& /*damage*/, DamageEffectType damageType)
+        void DamageDealt(Unit* victim, uint32& damage, DamageEffectType damageType)
         {
             if (victim == me)
                 return;
@@ -1046,27 +1078,13 @@ public:
                 }
             }
 
-            if (victim == me)
-                return;
-
-            if (damageType == DIRECT_DAMAGE || damageType == SPELL_DIRECT_DAMAGE)
-            {
-                for (uint8 i = 0; i != MAX_BOT_CTC_SPELLS; ++i)
-                {
-                    if (_ctc[i].first && !_ctc[i].second)
-                    {
-                        if (urand(1,100) <= CalcCTC(_ctc[i].first))
-                            _ctc[i].second = 1000;
-
-                        if (_ctc[i].second > 0)
-                            me->CastSpell(victim, _ctc[i].first, true);
-                    }
-                }
-            }
+            bot_ai::DamageDealt(victim, damage, damageType);
         }
 
         void DamageTaken(Unit* u, uint32& /*damage*/)
         {
+            if (!u->IsInCombat() && !me->IsInCombat())
+                return;
             OnOwnerDamagedBy(u);
         }
 
@@ -1079,7 +1097,7 @@ public:
         {
             for (uint8 i = 0; i != MAX_TOTEMS; ++i)
             {
-                if (_totems[i].first != 0)
+                if (_totems[i].first)
                 {
                     Unit* to = sObjectAccessor->FindUnit(_totems[i].first);
                     if (!to)
@@ -1094,21 +1112,6 @@ public:
 
         void Reset()
         {
-            Riptide_Timer = 0;
-            Shock_Timer = 0;
-            Lightning_Bolt_Timer = 0;
-            Searing_Totem_Timer = 0;
-            Totem_of_Wrath_Timer = 0;
-            CheckDispelTimer = 0;
-            Wind_Shear_Timer = 0;
-            Chain_Lightning_Timer = 0;
-            Lava_Burst_Timer = 0;
-            Thunderstorm_Timer = 0;
-            Hex_Timer = 0;
-            Bloodlust_Timer = 10000;
-            Stormstrike_Timer = 0;
-            Mana_Tide_Totem_Timer = 10000;
-
             HexyCheckTimer = 3000;
             EarthyCheckTimer = 2000;
             MaelstromTimer = 0;
@@ -1121,32 +1124,11 @@ public:
             LOvBolt = false;
             LOvChain = false;
 
-            if (master)
-            {
-                setStats(CLASS_SHAMAN, me->getRace(), master->getLevel(), true);
-                ApplyClassPassives();
-                ApplyPassives(CLASS_SHAMAN);
-            }
+            DefaultInit();
         }
 
         void ReduceCD(uint32 diff)
         {
-            CommonTimers(diff);
-            if (Riptide_Timer > diff)           Riptide_Timer -= diff;
-            if (Shock_Timer > diff)             Shock_Timer -= diff;
-            if (Lightning_Bolt_Timer > diff)    Lightning_Bolt_Timer -= diff;
-            if (Searing_Totem_Timer > diff)     Searing_Totem_Timer -= diff;
-            if (Totem_of_Wrath_Timer > diff)    Totem_of_Wrath_Timer -= diff;
-            if (CheckDispelTimer > diff)        CheckDispelTimer -= diff;
-            if (Wind_Shear_Timer > diff)        Wind_Shear_Timer -= diff;
-            if (Chain_Lightning_Timer > diff)   Chain_Lightning_Timer -= diff;
-            if (Lava_Burst_Timer > diff)        Lava_Burst_Timer -= diff;
-            if (Thunderstorm_Timer > diff)      Thunderstorm_Timer -= diff;
-            if (Hex_Timer > diff)               Hex_Timer -= diff;
-            if (Bloodlust_Timer > diff)         Bloodlust_Timer -= diff;
-            if (Stormstrike_Timer > diff)       Stormstrike_Timer -= diff;
-            if (Mana_Tide_Totem_Timer > diff)   Mana_Tide_Totem_Timer -= diff;
-
             if (HexyCheckTimer > diff)          HexyCheckTimer -= diff;
             if (EarthyCheckTimer > diff)        EarthyCheckTimer -= diff;
 
@@ -1157,148 +1139,100 @@ public:
             else                                WindfuryTimer = 0;
         }
 
-        bool CanRespawn()
-        {return false;}
-
         void InitSpells()
         {
             uint8 lvl = me->getLevel();
-            HEALING_WAVE                            = InitSpell(me, HEALING_WAVE_1);
-            CHAIN_HEAL                              = InitSpell(me, CHAIN_HEAL_1);
-            LESSER_HEALING_WAVE                     = InitSpell(me, LESSER_HEALING_WAVE_1);
-  /*Talent*/RIPTIDE                     = lvl >= 60 ? InitSpell(me, RIPTIDE_1) : 0;
-            ANCESTRAL_SPIRIT                        = InitSpell(me, ANCESTRAL_SPIRIT_1);
-            CURE_TOXINS                 = lvl <= 38 ? InitSpell(me, CURE_TOXINS_1) : CLEANSE_SPIRIT_1;
-            FLAME_SHOCK                             = InitSpell(me, FLAME_SHOCK_1);
-            EARTH_SHOCK                             = InitSpell(me, EARTH_SHOCK_1);
-            FROST_SHOCK                             = InitSpell(me, FROST_SHOCK_1);
-            STORMSTRIKE                 = lvl >= 40 ? STORMSTRIKE_1 : 0;
-            LIGHTNING_BOLT                          = InitSpell(me, LIGHTNING_BOLT_1);
-            CHAIN_LIGHTNING                         = InitSpell(me, CHAIN_LIGHTNING_1);
-            LAVA_BURST                              = InitSpell(me, LAVA_BURST_1);
-  /*Talent*/THUNDERSTORM                = lvl >= 60 ? InitSpell(me, THUNDERSTORM_1) : 0;
-            LIGHTNING_SHIELD                        = InitSpell(me, LIGHTNING_SHIELD_1);
-  /*Talent*/EARTH_SHIELD                = lvl >= 50 ? InitSpell(me, EARTH_SHIELD_1) : 0;
-     /*NYI*/WATER_SHIELD                            = InitSpell(me, WATER_SHIELD_1);
-            WATER_BREATHING                         = InitSpell(me, WATER_BREATHING_1);
-            WATER_WALKING                           = InitSpell(me, WATER_WALKING_1);
-  /*CUSTOM*/BLOODLUST                   = lvl >= 60 ? BLOODLUST_1 : 0;
-            PURGE                                   = InitSpell(me, PURGE_1);
-            WIND_SHEAR                              = InitSpell(me, WIND_SHEAR_1);
-            HEX                                     = InitSpell(me, HEX_1);
-   /*Quest*/STONESKIN_TOTEM             = lvl >= 10 ? InitSpell(me, STONESKIN_TOTEM_1) : 0;
-            HEALINGSTREAM_TOTEM                     = InitSpell(me, HEALINGSTREAM_TOTEM_1);
-            MANASPRING_TOTEM                        = InitSpell(me, MANASPRING_TOTEM_1);
-   /*Quest*/SEARING_TOTEM               = lvl >= 10 ? InitSpell(me, SEARING_TOTEM_1) : 0;
-            WINDFURY_TOTEM                          = InitSpell(me, WINDFURY_TOTEM_1);
-            STRENGTH_OF_EARTH_TOTEM                 = InitSpell(me, STRENGTH_OF_EARTH_TOTEM_1);
-  /*Talent*/TOTEM_OF_WRATH              = lvl >= 50 ? InitSpell(me, TOTEM_OF_WRATH_1) : 0;
-  /*Talent*/MANA_TIDE_TOTEM             = lvl >= 40 ? MANA_TIDE_TOTEM_1 : 0;
+            InitSpellMap(HEALING_WAVE_1);
+            InitSpellMap(CHAIN_HEAL_1);
+            InitSpellMap(LESSER_HEALING_WAVE_1);
+  /*Talent*/lvl >= 60 ? InitSpellMap(RIPTIDE_1) : RemoveSpell(RIPTIDE_1);
+            InitSpellMap(ANCESTRAL_SPIRIT_1);
+            CURE_TOXINS = lvl >= 39 ? InitSpell(me, CLEANSE_SPIRIT_1) : InitSpell(me, CURE_TOXINS_1);
+            InitSpellMap(CURE_TOXINS);
+            InitSpellMap(FLAME_SHOCK_1);
+            InitSpellMap(EARTH_SHOCK_1);
+            InitSpellMap(FROST_SHOCK_1);
+  /*Talent*/lvl >= 40 ? InitSpellMap(STORMSTRIKE_1) : RemoveSpell(STORMSTRIKE_1);
+            InitSpellMap(LIGHTNING_BOLT_1);
+            InitSpellMap(CHAIN_LIGHTNING_1);
+            InitSpellMap(LAVA_BURST_1);
+  /*Talent*/lvl >= 60 ? InitSpellMap(THUNDERSTORM_1) : RemoveSpell(THUNDERSTORM_1);
+            InitSpellMap(LIGHTNING_SHIELD_1);
+  /*Talent*/lvl >= 50 ? InitSpellMap(EARTH_SHIELD_1) : RemoveSpell(EARTH_SHIELD_1);
+     /*NYI*///InitSpellMap(WATER_SHIELD_1);
+            InitSpellMap(WATER_BREATHING_1);
+            InitSpellMap(WATER_WALKING_1);
+  /*CUSTOM*/lvl >= 60 ? InitSpellMap(BLOODLUST_1) : RemoveSpell(BLOODLUST_1);
+            InitSpellMap(PURGE_1);
+            InitSpellMap(WIND_SHEAR_1);
+            InitSpellMap(HEX_1);
+   /*Quest*/lvl >= 10 ? InitSpellMap(STONESKIN_TOTEM_1) : RemoveSpell(STONESKIN_TOTEM_1);
+            InitSpellMap(HEALINGSTREAM_TOTEM_1);
+            InitSpellMap(MANASPRING_TOTEM_1);
+   /*Quest*/lvl >= 10 ? InitSpellMap(SEARING_TOTEM_1) : RemoveSpell(SEARING_TOTEM_1);
+            InitSpellMap(WINDFURY_TOTEM_1);
+            InitSpellMap(STRENGTH_OF_EARTH_TOTEM_1);
+  /*Talent*/lvl >= 50 ? InitSpellMap(TOTEM_OF_WRATH_1) : RemoveSpell(TOTEM_OF_WRATH_1);
+  /*Talent*/lvl >= 40 ? InitSpellMap(MANA_TIDE_TOTEM_1) : RemoveSpell(MANA_TIDE_TOTEM_1);
         }
 
         void ApplyClassPassives()
         {
             uint8 level = master->getLevel();
-            if (level >= 58)
-                RefreshAura(ELEMENTAL_WARDING,2); //12%
-            else if (level >= 15)
-                RefreshAura(ELEMENTAL_WARDING); //6%
-            if (level >= 18)
-                RefreshAura(ELEMENTAL_DEVASTATION3); //9%
-            else if (level >= 15)
-                RefreshAura(ELEMENTAL_DEVASTATION2); //6%
-            else if (level >= 12)
-                RefreshAura(ELEMENTAL_DEVASTATION1); //3%
-            if (level >= 30)
-                RefreshAura(ANCESTRAL_KNOWLEDGE,3); //30%
-            else if (level >= 20)
-                RefreshAura(ANCESTRAL_KNOWLEDGE,2); //20%
-            else if (level >= 10)
-                RefreshAura(ANCESTRAL_KNOWLEDGE); //10%
-            if (level >= 25)
-                RefreshAura(TOUGHNESS); //10%, 30%
-            if (level >= 29)
-                RefreshAura(FLURRY5); //30%
-            else if (level >= 28)
-                RefreshAura(FLURRY4); //24%
-            else if (level >= 27)
-                RefreshAura(FLURRY3); //18%
-            else if (level >= 26)
-                RefreshAura(FLURRY2); //12%
-            else if (level >= 25)
-                RefreshAura(FLURRY1); //6%
-            if (level >= 50)
-                RefreshAura(WEAPON_MASTERY,3); //30%
-            else if (level >= 40)
-                RefreshAura(WEAPON_MASTERY,2); //20%
-            else if (level >= 30)
-                RefreshAura(WEAPON_MASTERY); //10%
-            if (level >= 45)
-                RefreshAura(STATIC_SHOCK,2); //12%
-            else if (level >= 41)
-                RefreshAura(STATIC_SHOCK); //6%
-            if (level >= 20)
-                RefreshAura(ANCESTRAL_HEALING); //10%
-            if (level >= 50)
-                RefreshAura(ANCESTRAL_AWAKENING); //30%
 
-            if (level >= 70)
-                RefreshAura(SHAMAN_T10_RESTO_4P); //25%
+            RefreshAura(ELEMENTAL_WARDING, level >= 58 ? 2 : level >= 15 ? 1 : 0);
+            RefreshAura(ELEMENTAL_DEVASTATION3, level >= 18 ? 1 : 0);
+            RefreshAura(ELEMENTAL_DEVASTATION2, level >= 15 && level < 18 ? 1 : 0);
+            RefreshAura(ELEMENTAL_DEVASTATION1, level >= 12 && level < 15 ? 1 : 0);
+            RefreshAura(ANCESTRAL_KNOWLEDGE, level >= 30 ? 3 : level >= 20 ? 2 : level >= 10 ? 1 : 0);
+            RefreshAura(TOUGHNESS, level >= 25 ? 1 : 0);
+            RefreshAura(FLURRY5, level >= 29 ? 1 : 0);
+            RefreshAura(FLURRY4, level >= 28 && level < 29 ? 1 : 0);
+            RefreshAura(FLURRY3, level >= 27 && level < 28 ? 1 : 0);
+            RefreshAura(FLURRY2, level >= 26 && level < 27 ? 1 : 0);
+            RefreshAura(FLURRY1, level >= 25 && level < 26 ? 1 : 0);
+            RefreshAura(WEAPON_MASTERY, level >= 50 ? 3 : level >= 40 ? 2 : level >= 30 ? 1 : 0);
+            RefreshAura(STATIC_SHOCK, level >= 45 ? 2 : level >= 41 ? 1 : 0);
+            RefreshAura(ANCESTRAL_HEALING, level >= 20 ? 1 : 0);
+            RefreshAura(ANCESTRAL_AWAKENING, level >= 50 ? 1 : 0);
+            RefreshAura(SHAMAN_T10_RESTO_4P, level >= 70 ? 1 : 0);
+            RefreshAura(MAELSTROM_WEAPON5, level >= 70 ? 2 : level >= 60 ? 1 : 0);
+            RefreshAura(MAELSTROM_WEAPON4, level >= 55 && level < 60 ? 1 : 0);
+            RefreshAura(MAELSTROM_WEAPON3, level >= 50 && level < 55 ? 1 : 0);
+            RefreshAura(MAELSTROM_WEAPON2, level >= 45 && level < 50 ? 1 : 0);
+            RefreshAura(MAELSTROM_WEAPON1, level >= 40 && level < 45 ? 1 : 0);
+            RefreshAura(UNLEASHED_RAGE, level >= 40 ? 1 : 0);
+            RefreshAura(IMPROVED_STORMSTRIKE, level >= 40 ? 1 : 0);
+            RefreshAura(ELEMENTAL_OATH, level >= 40 ? 1 : 0);
+            RefreshAura(EARTHLIVING_WEAPON_PASSIVE_6, level >= 70 ? 3 : 0);
+            RefreshAura(EARTHLIVING_WEAPON_PASSIVE_5, level >= 50 && level < 70 ? 3 : 0);
+            RefreshAura(EARTHLIVING_WEAPON_PASSIVE_4, level >= 30 && level < 50 ? 3 : 0);
+        }
 
-
-            //spec-based (race-based)
-            if (level >= 40)
+        bool CanUseManually(uint32 basespell) const
+        {
+            switch (basespell)
             {
-                if (isTwoHander())
-                {
-                    if (level >= 70)
-                        RefreshAura(MAELSTROM_WEAPON5,2);
-                    else if (level >= 60)
-                        RefreshAura(MAELSTROM_WEAPON5);
-                    else if (level >= 55)
-                        RefreshAura(MAELSTROM_WEAPON4);
-                    else if (level >= 50)
-                        RefreshAura(MAELSTROM_WEAPON3);
-                    else if (level >= 45)
-                        RefreshAura(MAELSTROM_WEAPON2);
-                    else// if (level >= 40)
-                        RefreshAura(MAELSTROM_WEAPON1);
-
-                    RefreshAura(UNLEASHED_RAGE);
-                    RefreshAura(IMPROVED_STORMSTRIKE); //20%
-                }
-                else
-                    RefreshAura(ELEMENTAL_OATH);
-            }
-
-            EARTHLIVING_WEAPON =
-                level >= 70 ? EARTHLIVING_WEAPON_PASSIVE_6 :
-                level >= 50 ? EARTHLIVING_WEAPON_PASSIVE_5 :
-                level >= 30 ? EARTHLIVING_WEAPON_PASSIVE_4 : 0;
-            if (EARTHLIVING_WEAPON)
-            {
-                me->RemoveAurasDueToSpell(EARTHLIVING_WEAPON_PASSIVE_4);
-                me->RemoveAurasDueToSpell(EARTHLIVING_WEAPON_PASSIVE_5);
-                me->RemoveAurasDueToSpell(EARTHLIVING_WEAPON_PASSIVE_6);
-                RefreshAura(EARTHLIVING_WEAPON, 3);
+                case HEALING_WAVE_1:
+                case CHAIN_HEAL_1:
+                case LESSER_HEALING_WAVE_1:
+                case RIPTIDE_1:
+                case CURE_TOXINS_1:
+                case CLEANSE_SPIRIT_1:
+                case BLOODLUST_1:
+                case WATER_SHIELD_1:
+                case MANA_TIDE_TOTEM_1:
+                    return true;
+                default:
+                    return false;
             }
         }
 
     private:
+        typedef std::pair<uint64 /*guid*/, TotemParam /*param*/> BotTotem;
         BotTotem _totems[MAX_TOTEMS];
-        uint32
-            HEALING_WAVE, CHAIN_HEAL, LESSER_HEALING_WAVE, RIPTIDE, ANCESTRAL_SPIRIT, CURE_TOXINS,
-            FLAME_SHOCK, EARTH_SHOCK, FROST_SHOCK, STORMSTRIKE, LIGHTNING_BOLT, CHAIN_LIGHTNING, LAVA_BURST, THUNDERSTORM,
-            LIGHTNING_SHIELD, EARTH_SHIELD, WATER_SHIELD, WATER_BREATHING, WATER_WALKING, BLOODLUST,
-            PURGE, WIND_SHEAR, HEX,
-            STONESKIN_TOTEM, HEALINGSTREAM_TOTEM, MANASPRING_TOTEM, WINDFURY_TOTEM, STRENGTH_OF_EARTH_TOTEM,
-            SEARING_TOTEM, TOTEM_OF_WRATH, MANA_TIDE_TOTEM;
-        uint32
-            EARTHLIVING_WEAPON;
+        uint32 CURE_TOXINS;
         //Timers
-        uint32 Riptide_Timer, Shock_Timer, Lightning_Bolt_Timer, Searing_Totem_Timer, Totem_of_Wrath_Timer,
-            CheckDispelTimer, Wind_Shear_Timer, Chain_Lightning_Timer, Lava_Burst_Timer, Thunderstorm_Timer,
-            Hex_Timer, Bloodlust_Timer, Stormstrike_Timer, Mana_Tide_Totem_Timer;
         uint32 HexyCheckTimer, EarthyCheckTimer, MaelstromTimer, WindfuryTimer;
         uint8 MaelstromCount;
         bool Hexy, Earthy, LOvChain, LOvBolt;
@@ -1391,7 +1325,10 @@ public:
 
             MAELSTROM_WEAPON_BUFF               = 53817,
             STORMSTRIKE_DAMAGE                  = 32175,
-            STORMSTRIKE_DAMAGE_OFFHAND          = 32176
+            STORMSTRIKE_DAMAGE_OFFHAND          = 32176,
+
+            LIGHTNING_SHIELD_DAMAGE_1           = 26364,
+            EARTH_SHIELD_HEAL                   = 379
         };
     };
 };

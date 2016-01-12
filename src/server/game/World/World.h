@@ -168,6 +168,30 @@ enum WorldBoolConfigs
     CONFIG_EVENT_ANNOUNCE,
     CONFIG_STATS_LIMITS_ENABLE,
     CONFIG_INSTANCES_RESET_ANNOUNCE,
+    // Prepatch by LordPsyan
+    // 01
+    // 02
+    // 03
+    // 04
+    // 05
+    // 06
+    // 07
+    // 08
+    // 09
+    // 10
+    // 11
+    // 12
+    // 13
+    // 14
+    // 15
+    // 16
+    // 17
+    // 18
+    // 19
+    // 20
+    // Visit http://www.realmsofwarcraft.com/bb for forums and information
+    //
+    // End of prepatch
     BOOL_CONFIG_VALUE_COUNT
 };
 
@@ -188,6 +212,50 @@ enum WorldFloatConfigs
     CONFIG_STATS_LIMITS_PARRY,
     CONFIG_STATS_LIMITS_BLOCK,
     CONFIG_STATS_LIMITS_CRIT,
+    // Prepatch by LordPsyan
+    // 21
+    // 22
+    // 23
+    // 24
+    // 25
+    // 26
+    // 27
+    // 28
+    // 29
+    // 30
+    // 31
+    // 32
+    // 33
+    // 34
+    // 35
+    // 36
+    // 37
+    // 38
+    // 39
+    // 40
+    // 41
+    // 42
+    // 43
+    // 44
+    // 45
+    // 46
+    // 47
+    // 48
+    // 49
+    // 50
+    // 51
+    // 52
+    // 53
+    // 54
+    // 55
+    // 56
+    // 57
+    // 58
+    // 59
+    // 60
+    // Visit http://www.realmsofwarcraft.com/bb for forums and information
+    //
+    // End of prepatch
     FLOAT_CONFIG_VALUE_COUNT
 };
 
@@ -357,7 +425,31 @@ enum WorldIntConfigs
     CONFIG_TRIAL_MAX_LEVEL,
     CONFIG_TRIAL_MAX_MONEY,
     CONFIG_TRIAL_ACTIVATE_TIME,
-CONFIG_AHBOT_UPDATE_INTERVAL,	
+    CONFIG_AHBOT_UPDATE_INTERVAL,
+    // Prepatch by LordPsyan
+    // 61
+    // 62
+    // 63
+    // 64
+    // 65
+    // 66
+    // 67
+    // 68
+    // 69
+    // 70
+    // 71
+    // 72
+    // 73
+    // 74
+    // 75
+    // 76
+    // 77
+    // 78
+    // 79
+    // 80
+    // Visit http://www.realmsofwarcraft.com/bb for forums and information
+    //
+    // End of prepatch
     INT_CONFIG_VALUE_COUNT
 };
 
@@ -532,7 +624,7 @@ private:
     CliCommandHolder& operator=(CliCommandHolder const& right) DELETE_MEMBER;
 };
 
-typedef UNORDERED_MAP<uint32, WorldSession*> SessionMap;
+typedef std::unordered_map<uint32, WorldSession*> SessionMap;
 
 struct CharacterNameData
 {
@@ -808,7 +900,7 @@ class World
         uint32 m_currentTime;
 
         SessionMap m_sessions;
-        typedef UNORDERED_MAP<uint32, time_t> DisconnectMap;
+        typedef std::unordered_map<uint32, time_t> DisconnectMap;
         DisconnectMap m_disconnects;
         uint32 m_maxActiveSessionCount;
         uint32 m_maxQueuedSessionCount;

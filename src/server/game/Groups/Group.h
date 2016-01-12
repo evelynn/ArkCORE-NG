@@ -127,6 +127,9 @@ enum GroupUpdateFlags
                         GROUP_UPDATE_FLAG_AURAS | GROUP_UPDATE_PET | GROUP_UPDATE_FLAG_PHASE // all known flags, except UNK100 and VEHICLE_SEAT
 };
 
+#define GROUP_UPDATE_FLAGS_COUNT          20
+                                                                // 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
+static const uint8 GroupUpdateLength[GROUP_UPDATE_FLAGS_COUNT] = { 0, 2, 2, 2, 1, 2, 2, 2, 2, 4, 8, 8, 1, 2, 2, 2, 1, 2, 2, 8};
 class Roll : public LootValidatorRef
 {
     public:
@@ -176,7 +179,7 @@ class Group
         typedef std::list<MemberSlot> MemberSlotList;
         typedef MemberSlotList::const_iterator member_citerator;
 
-        typedef UNORDERED_MAP< uint32 /*mapId*/, InstanceGroupBind> BoundInstancesMap;
+        typedef std::unordered_map< uint32 /*mapId*/, InstanceGroupBind> BoundInstancesMap;
     protected:
         typedef MemberSlotList::iterator member_witerator;
         typedef std::set<Player*> InvitesList;
@@ -214,6 +217,7 @@ class Group
         bool isBFGroup()   const;
         bool IsGuildGroup(bool AllInSameMap = false, bool AllInSameInstanceId = false);
         bool IsCreated()   const;
+		bool IsGuildGroup(uint32 guildId, bool AllInSameMap = false, bool AllInSameInstanceId = false);
         uint64 GetLeaderGUID() const;
         uint64 GetGUID() const;
         uint32 GetLowGUID() const;

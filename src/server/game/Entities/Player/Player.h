@@ -59,11 +59,10 @@ class SpellCastTargets;
 class UpdateMask;
 class PhaseMgr;
 
-// npcbot mod
-struct NpcBotMap;
-#define MAX_NPCBOTS 39
-class BotHelper;
-// end npcbot mod
+
+// NpcBot mod
+class BotMgr;
+// end NpcBot mod
 
 typedef std::deque<Mail*> PlayerMails;
 
@@ -185,10 +184,10 @@ struct PlayerCurrency
    uint32 weekCount;
 };
 
-typedef UNORDERED_MAP<uint32, PlayerTalent*> PlayerTalentMap;
-typedef UNORDERED_MAP<uint32, PlayerSpell*> PlayerSpellMap;
+typedef std::unordered_map<uint32, PlayerTalent*> PlayerTalentMap;
+typedef std::unordered_map<uint32, PlayerSpell*> PlayerSpellMap;
 typedef std::list<SpellModifier*> SpellModList;
-typedef UNORDERED_MAP<uint32, PlayerCurrency> PlayerCurrenciesMap;
+typedef std::unordered_map<uint32, PlayerCurrency> PlayerCurrenciesMap;
 
 typedef std::list<uint64> WhisperListContainer;
 
@@ -293,7 +292,7 @@ struct SpellCooldown
 
 typedef std::map<uint32, SpellCooldown> SpellCooldowns;
 typedef std::list<uint32> SpellCooldownToRemove;
-typedef UNORDERED_MAP<uint32 /*instanceId*/, time_t/*releaseTime*/> InstanceTimeMap;
+typedef std::unordered_map<uint32 /*instanceId*/, time_t/*releaseTime*/> InstanceTimeMap;
 
 enum TrainerSpellState
 {
@@ -644,7 +643,7 @@ struct SkillStatusData
     SkillUpdateState uState;
 };
 
-typedef UNORDERED_MAP<uint32, SkillStatusData> SkillStatusMap;
+typedef std::unordered_map<uint32, SkillStatusData> SkillStatusMap;
 
 class Quest;
 class Spell;
@@ -1385,6 +1384,7 @@ class Player : public Unit, public GridObject<Player>
         void SetBankBagSlotCount(uint8 count) { SetByteValue(PLAYER_BYTES_2, 2, count); }
         bool HasItemCount(uint32 item, uint32 count = 1, bool inBankAlso = false) const;
         bool HasItemFitToSpellRequirements(SpellInfo const* spellInfo, Item const* ignoreItem = NULL) const;
+        bool HasAllItemsToFitToSpellRequirements(SpellInfo const* spellInfo);
         bool CanNoReagentCast(SpellInfo const* spellInfo) const;
         bool HasItemOrGemWithIdEquipped(uint32 item, uint32 count, uint8 except_slot = NULL_SLOT) const;
         bool HasItemOrGemWithLimitCategoryEquipped(uint32 limitCategory, uint32 count, uint8 except_slot = NULL_SLOT) const;
@@ -1752,7 +1752,7 @@ class Player : public Unit, public GridObject<Player>
         uint8 unReadMails;
         time_t m_nextMailDelivereTime;
 
-        typedef UNORDERED_MAP<uint32, Item*> ItemMap;
+        typedef std::unordered_map<uint32, Item*> ItemMap;
 
         ItemMap mMitems;                                    //template defined in objectmgr.cpp
 
@@ -1996,8 +1996,6 @@ class Player : public Unit, public GridObject<Player>
         void ApplyRatingMod(CombatRating cr, int32 value, bool apply);
         void UpdateRating(CombatRating cr);
         void UpdateAllRatings();
-        void UpdateMastery();
-        bool CanUseMastery() const;
 
         void CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bool addTotalPct, float& minDamage, float& maxDamage) override;
 
@@ -2196,6 +2194,27 @@ class Player : public Unit, public GridObject<Player>
         float GetTotalPercentageModValue(BaseModGroup modGroup) const { return m_auraBaseMod[modGroup][FLAT_MOD] + m_auraBaseMod[modGroup][PCT_MOD]; }
         void _ApplyAllStatBonuses();
         void _RemoveAllStatBonuses();
+
+        // Mastery Functions
+        void UpdateMastery();
+        float GetBaseMasteryPoints() const
+        {
+            switch (GetPrimaryTalentTree(GetActiveSpec()))
+            {
+            case TALENT_TREE_MAGE_FIRE:
+                return 7.86f;
+            case TALENT_TREE_MAGE_FROST:
+            case TALENT_TREE_WARRIOR_FURY:
+                return 2.0f;
+            default:
+                return 8.0f;
+            }
+        }
+        float GetMasteryPoints() const { return GetBaseMasteryPoints() + CalculateMasteryFromMasteryRating(m_baseRatingValue[CR_MASTERY]); }
+        float CalculateMasteryFromMasteryRating(int32 curr_rating) const { return float(curr_rating * 0.0055779569892473f); }
+        int32 CalculateMasteryRatingFromMastery(float curr_mastery) { return int32(curr_mastery / 0.0055779569892473f); }
+        void RemoveOrAddMasterySpells();
+        bool CanUseMastery() const;
 
         void ResetAllPowers();
 
@@ -2417,7 +2436,7 @@ class Player : public Unit, public GridObject<Player>
         /***                 INSTANCE SYSTEM                   ***/
         /*********************************************************/
 
-        typedef UNORDERED_MAP< uint32 /*mapId*/, InstancePlayerBind > BoundInstancesMap;
+        typedef std::unordered_map< uint32 /*mapId*/, InstancePlayerBind > BoundInstancesMap;
 
         void UpdateHomebindTime(uint32 time);
 
@@ -2569,43 +2588,43 @@ class Player : public Unit, public GridObject<Player>
         bool SwapVoidStorageItem(uint8 oldSlot, uint8 newSlot);
         VoidStorageItem* GetVoidStorageItem(uint8 slot) const;
         VoidStorageItem* GetVoidStorageItem(uint64 id, uint8& slot) const;
-
+    // Prepatch by LordPsyan
+    // 01
+    // 02
+    // 03
+    // 04
+    // 05
+    // 06
+    // 07
+    // 08
+    // 09
+    // 10
         /*********************************************************/
-        /***                     BOT SYSTEM  434                  ***/
+        /***                     BOT SYSTEM                    ***/
         /*********************************************************/
-        void SetBotHelper(BotHelper* hlpr) { ASSERT(!_botHlpr); _botHlpr = hlpr; }
-        BotHelper* GetBotHelper() const { return _botHlpr; }
-        void RefreshBot(uint32 p_time);
-        void CreateBot(uint32 botentry, uint8 botrace, uint8 botclass, bool istank = false, bool revive = false);
-        void CreateNPCBot(uint8 botclass);
-        int8 GetNpcBotSlot(uint64 guid) const;
-        void SendBotCommandState(Creature* cre, CommandStates state);
+        void SetBotMgr(BotMgr* mgr) { ASSERT(!_botMgr); _botMgr = mgr; }
+        BotMgr* GetBotMgr() const { return _botMgr; }
         bool HaveBot() const;
-        void RemoveBot(uint64 guid, bool final = false, bool eraseFromDB = true);
-        void SetBot(Creature* cre) { m_bot = cre; }
-        uint8 GetNpcBotsCount() const;
-        void SetBotMustBeCreated(uint32 m_entry, uint8 m_race, uint8 m_class, bool istank, uint32 *equips);
-        void ClearBotMustBeCreated(uint64 value, bool guid = true, bool fully = false);
-        bool GetBotMustBeCreated();
-        uint64 GetBotTankGuid() const { return m_botTankGuid; }
-        void SetBotTank(uint64 guid);
-        Unit* GetBotTank(uint32 entry);
-        uint8 GetBotFollowDist() const { return m_followdist; }
-        void SetBotFollowDist(int8 dist) { m_followdist = dist; }
-        void SetNpcBotDied(uint64 guid);
-        NpcBotMap const* GetBotMap(uint8 pos) const { return m_botmap[pos]; }
-        uint8 GetMaxNpcBots() const;
-        uint8 GetNpcBotXpReduction() const { return m_xpReductionNpcBots; }
-        bool RestrictBots() const;
-        uint32 GetNpcBotCost() const;
-        std::string GetNpcBotCostStr() const;
-        void InitBotEquips(Creature* bot);
-        void UpdateBotEquips(Creature* bot, uint8 slot, uint32 itemId);
-        uint32 GetBotEquip(Creature* bot, uint8 slot) const;
+        uint8 GetNpcBotsCount(bool inWorldOnly = false) const;
+        uint8 GetBotFollowDist() const;
+        void SetBotFollowDist(int8 dist);
+        void SetBotsShouldUpdateStats();
+        void RemoveAllBots(uint8 removetype = 0);
         /*********************************************************/
         /***                 END BOT SYSTEM                    ***/
         /*********************************************************/
-        
+    // 12
+    // 13
+    // 14
+    // 15
+    // 16
+    // 17
+    // 18
+    // 19
+    // 20
+    // Visit http://www.realmsofwarcraft.com/bb for forums and information
+    //
+    // End of prepatch
     protected:
         // Gamemaster whisper whitelist
         WhisperListContainer WhisperList;
@@ -2640,7 +2659,7 @@ class Player : public Unit, public GridObject<Player>
         //We allow only one timed quest active at the same time. Below can then be simple value instead of set.
         typedef std::set<uint32> QuestSet;
         typedef std::set<uint32> SeasonalQuestSet;
-        typedef UNORDERED_MAP<uint32, SeasonalQuestSet> SeasonalEventQuestMap;
+        typedef std::unordered_map<uint32, SeasonalQuestSet> SeasonalEventQuestMap;
         QuestSet m_timedquests;
         QuestSet m_weeklyquests;
         QuestSet m_monthlyquests;
@@ -2891,24 +2910,7 @@ class Player : public Unit, public GridObject<Player>
         /*********************************************************/
         /***                     BOT SYSTEM                    ***/
         /*********************************************************/
-        BotHelper* _botHlpr;
-        Creature* m_bot;
-        int8 m_followdist;
-        uint64 m_botTankGuid;
-        uint8 m_maxNpcBots;
-        uint8 m_maxClassNpcBots;
-        uint8 m_xpReductionNpcBots;
-        bool m_enableNpcBots;
-        bool m_enableNpcBotsArenas;
-        bool m_enableNpcBotsBGs;
-        bool m_enableNpcBotsDungeons;
-        bool m_enableNpcBotsRaids;
-        bool m_limitNpcBotsDungeons;
-        bool m_limitNpcBotsRaids;
-        uint32 m_NpcBotsCost;
-        uint32 m_botTimer;
-        uint32 m_botCreateTimer;
-        NpcBotMap* m_botmap[MAX_NPCBOTS];
+        BotMgr* _botMgr;
         /*********************************************************/
         /***                END BOT SYSTEM                     ***/
         /*********************************************************/
@@ -2987,7 +2989,30 @@ class Player : public Unit, public GridObject<Player>
 
         uint32 _activeCheats;
         uint32 _maxPersonalArenaRate;
-
+        // Prepatch by LordPsyan
+        // 21
+        // 22
+        // 23
+        // 24
+        // 25
+        // 26
+        // 27
+        // 28
+        // 29
+        // 30
+        // 31
+        // 32
+        // 33
+        // 34
+        // 35
+        // 36
+        // 37
+        // 38
+        // 39
+        // 40
+        // Visit http://www.realmsofwarcraft.com/bb for forums and information
+        //
+        // End of prepatch
         PhaseMgr phaseMgr;
 };
 

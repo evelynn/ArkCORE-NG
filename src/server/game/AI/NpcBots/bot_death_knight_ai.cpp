@@ -1,4 +1,6 @@
 #include "bot_ai.h"
+//#include "botmgr.h"
+#include "GameEventMgr.h"
 #include "Group.h"
 #include "Player.h"
 #include "ScriptMgr.h"
@@ -53,7 +55,7 @@ public:
 
     bool OnGossipHello(Player* player, Creature* creature)
     {
-        return bot_minion_ai::OnGossipHello(player, creature);
+        return bot_minion_ai::OnGossipHello(player, creature, 0);
     }
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 sender, uint32 action)
@@ -63,13 +65,23 @@ public:
         return true;
     }
 
+    bool OnGossipSelectCode(Player* player, Creature* creature, uint32 sender, uint32 action, char const* code)
+    {
+        if (bot_minion_ai* ai = creature->GetBotMinionAI())
+            return ai->OnGossipSelectCode(player, creature, sender, action, code);
+        return true;
+    }
+
     struct death_knight_botAI : public bot_minion_ai
     {
-        death_knight_botAI(Creature* creature) : bot_minion_ai(creature) { }
+        death_knight_botAI(Creature* creature) : bot_minion_ai(creature)
+        {
+            _botclass = BOT_CLASS_DEATH_KNIGHT;
+        }
 
         bool doCast(Unit* victim, uint32 spellId, bool triggered = false)
         {
-            if (checkBotCast(victim, spellId, CLASS_DEATH_KNIGHT) != SPELL_CAST_OK)
+            if (CheckBotCast(victim, spellId, BOT_CLASS_DEATH_KNIGHT) != SPELL_CAST_OK)
                 return false;
 
             SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
@@ -89,7 +101,7 @@ public:
             {
                 //std::ostringstream str;
                 //str << "Casting " << spellInfo->SpellName[0] << " on " << victim->GetName();
-                //me->MonsterWhisper(str.str().c_str(), master->GetGUID());
+                //me->Whisper(str.str().c_str(), LANG_UNIVERSAL, master->GetGUID());
                 //Set cooldown for runes
                 if (!triggered)
                 {
@@ -205,7 +217,7 @@ public:
                     _runes.runes[i].Cooldown = cooldown;
                     //std::ostringstream str;
                     //str << "Spent rune " << uint32(i) << " (type: " << uint32(runetype) << ')';
-                    //me->MonsterWhisper(str.str().c_str(), master->GetGUID());
+                    //me->Whisper(str.str().c_str(), LANG_UNIVERSAL, master->GetGUID());
                     return true;
                 }
             }
@@ -256,7 +268,7 @@ public:
 
             //std::ostringstream str;
             //str << "Failed to convert rune of type: " << uint32(runetype) << ")!";
-            //me->MonsterWhisper(str.str().c_str(), master->GetGUID());
+            //me->Whisper(str.str().c_str(), LANG_UNIVERSAL, master->GetGUID());
         }
 
         void ActivateAllRunes()
@@ -288,7 +300,8 @@ public:
             if (GetBotCommandState() == COMMAND_ATTACK && !force) return;
             Aggro(u);
             SetBotCommandState(COMMAND_ATTACK);
-            GetInPosition(force, false);
+            OnStartAttack(u);
+            GetInPosition(force);
         }
 
         void RuneTimers(uint32 diff)
@@ -333,12 +346,12 @@ public:
 
         uint8 GetBotStance() const { return Presence; }
 
-        void EnterCombat(Unit*) { }
+        void EnterCombat(Unit* u) { bot_minion_ai::EnterCombat(u); }
         void Aggro(Unit*) { }
         void AttackStart(Unit*) { }
-        void EnterEvadeMode() { }
-        void MoveInLineOfSight(Unit*) { }
-        void JustDied(Unit*) { master->SetNpcBotDied(me->GetGUID()); }
+        void EnterEvadeMode() { bot_minion_ai::EnterEvadeMode(); }
+        void MoveInLineOfSight(Unit* u) { bot_minion_ai::MoveInLineOfSight(u); }
+        void JustDied(Unit* u) { bot_minion_ai::JustDied(u); }
         void KilledUnit(Unit*) { }
         void DoNonCombatActions(uint32 diff)
         {
@@ -346,12 +359,12 @@ public:
                 return;
 
             //PATH OF FROST
-            if (PATH_OF_FROST && HaveRune(RUNE_FROST)/* && !me->IsMounted()*/) //works while mounted
+            if (GetSpell(PATH_OF_FROST_1) && HaveRune(RUNE_FROST)/* && !me->IsMounted()*/) //works while mounted
             {
                 if ((me->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING) && !me->HasAuraType(SPELL_AURA_WATER_WALK)) ||
                     (master->HasUnitMovementFlag(MOVEMENTFLAG_SWIMMING) && !master->HasAuraType(SPELL_AURA_WATER_WALK) && me->GetDistance(master) < 50))
                 {
-                    if (doCast(me, PATH_OF_FROST))
+                    if (doCast(me, GetSpell(PATH_OF_FROST_1)))
                         return;
                 }
             }
@@ -359,12 +372,12 @@ public:
 
         void CheckHysteria(uint32 diff)
         {
-            if (!HYSTERIA || Hysteria_cd > diff || GC_Timer > diff || IsCasting() || Rand() > 15)
+            if (!IsSpellReady(HYSTERIA_1, diff) || IsCasting() || Rand() > 15)
                 return;
 
             Unit* target = NULL;
 
-            if (master->IsAlive() && isMeleeClass(master->getClass()) && master->IsInCombat() &&
+            if (master->IsAlive() && IsMeleeClass(master->getClass()) && master->IsInCombat() &&
                 GetHealthPCT(master) > 80 && me->GetDistance(master) < 30 &&
                 master->getAttackers().empty() && !CCed(master, true))
             {
@@ -373,7 +386,7 @@ public:
                         target = master;
             }
 
-            if (!target && isMeleeClass(me->GetBotClass()) && GetHealthPCT(me) > 80 &&
+            if (!target && IsMeleeClass(_botclass) && GetHealthPCT(me) > 80 &&
                 me->getAttackers().empty() && !CCed(me, true))
             {
                 if (Unit* u = me->GetVictim())
@@ -381,7 +394,7 @@ public:
                         target = me;
             }
 
-            if (!target)
+            if (!target && !IAmFree())
             {
                 Group* gr = master->GetGroup();
                 if (gr)
@@ -392,7 +405,7 @@ public:
                         if (tPlayer == master) continue;
                         if (!tPlayer || !tPlayer->IsInWorld() || tPlayer->IsBeingTeleported()) continue;
                         if (!tPlayer->IsAlive() || me->GetMap() != tPlayer->FindMap()) continue;
-                        if (!isMeleeClass(tPlayer->getClass()) || !tPlayer->IsInCombat()) continue;
+                        if (!IsMeleeClass(tPlayer->getClass()) || !tPlayer->IsInCombat()) continue;
                         if (GetHealthPCT(tPlayer) < 80 || me->GetDistance(tPlayer) > 30) continue;
                         if (!tPlayer->getAttackers().empty() || CCed(tPlayer, true)) continue;
                         if (Unit* u = tPlayer->GetVictim())
@@ -407,26 +420,21 @@ public:
                 }
             }
 
-            if (target && doCast(target, HYSTERIA))
+            if (target && doCast(target, GetSpell(HYSTERIA_1)))
             {
                 if (target->GetTypeId() == TYPEID_PLAYER)
-                {
-                    me->MonsterWhisper("Hysteria on You!", target->ToPlayer());
-                    Hysteria_cd = 90000; //1.5 min for player
-                }
-                else
-                    Hysteria_cd = 30000; //30 sec for bot
+                    BotWhisper("Hysteria on You!", target->ToPlayer());
 
                 GC_Timer = 800;
                 return;
             }
 
-            Hysteria_cd = 2000; //fail
+            SetSpellCooldown(HYSTERIA_1, 2000); //fail
         }
 
         void CheckAntiMagicShell(uint32 diff)
         {
-            if (!ANTI_MAGIC_SHELL || AntiMagicShell_cd > diff || GetHealthPCT(me) > 55 ||
+            if (!IsSpellReady(ANTI_MAGIC_SHELL_1, diff, false) || GetHealthPCT(me) > 55 ||
                 getpower() < 200 || IsCasting() || Rand() > 50)
                 return;
 
@@ -463,15 +471,14 @@ public:
             if (cast)
             {
                 temptimer = GC_Timer;
-                if (doCast(me, ANTI_MAGIC_SHELL))
+                if (doCast(me, GetSpell(ANTI_MAGIC_SHELL_1)))
                 {
-                    AntiMagicShell_cd = 30000; //30 sec for bot
                     GC_Timer = temptimer;
                     return;
                 }
             }
 
-            AntiMagicShell_cd = 1500; //fail
+            SetSpellCooldown(ANTI_MAGIC_SHELL_1, 1500); //fail
         }
 
         void CheckPresence(uint32 diff)
@@ -479,7 +486,7 @@ public:
             if (presencetimer > diff || IsCasting() || Rand() > 30) //no GCD
                 return;
 
-            uint8 newpresence = master->GetBotTank(me->GetCreatureTemplate()->Entry) == me ? DEATH_KNIGHT_FROST_PRESENCE : DEATH_KNIGHT_BLOOD_PRESENCE;
+            uint8 newpresence = IsTank() ? DEATH_KNIGHT_FROST_PRESENCE : DEATH_KNIGHT_BLOOD_PRESENCE;
             if (Presence == newpresence)
             {
                 presencetimer = 500;
@@ -491,7 +498,7 @@ public:
             if (Presence == DEATH_KNIGHT_FROST_PRESENCE && HaveRune(RUNE_FROST))
             {
                 temptimer = GC_Timer;
-                if (doCast(me, FROST_PRESENCE))
+                if (doCast(me, FROST_PRESENCE_1))
                 {
                     GC_Timer = temptimer;
                     presencetimer = 1000;
@@ -501,7 +508,7 @@ public:
             else if (Presence == DEATH_KNIGHT_BLOOD_PRESENCE && HaveRune(RUNE_BLOOD))
             {
                 temptimer = GC_Timer;
-                if (doCast(me, BLOOD_PRESENCE))
+                if (doCast(me, BLOOD_PRESENCE_1))
                 {
                     GC_Timer = temptimer;
                     presencetimer = 1000;
@@ -514,13 +521,12 @@ public:
 
         void BreakCC(uint32 diff)
         {
-            if (LICHBORNE && Lichborne_cd <= diff &&/* Rand() < 75 &&*/
+            if (IsSpellReady(LICHBORNE_1, diff, false) &&/* Rand() < 75 &&*/
                 me->HasAuraWithMechanic((1<<MECHANIC_CHARM)|(1<<MECHANIC_FEAR)|(1<<MECHANIC_SLEEP)))
             {
                 temptimer = GC_Timer;
-                if (doCast(me, LICHBORNE))
+                if (doCast(me, GetSpell(LICHBORNE_1)))
                 {
-                    Lichborne_cd = 60000;
                     GC_Timer = temptimer;
                     return;
                 }
@@ -532,11 +538,9 @@ public:
         void UpdateAI(uint32 diff)
         {
             ReduceCD(diff);
-            if (IAmDead()) return;
-            if (me->GetVictim())
-                DoMeleeAttackIfReady();
-            else
-                Evade();
+            if (!GlobalUpdate(diff))
+                return;
+            CheckAttackState();
 
             if (me->getPowerType() != POWER_RUNIC_POWER)
                 InitPowers();
@@ -556,7 +560,7 @@ public:
             {
                 if (me->IsInCombat())
                 {
-                    if (int32(getpower()) < me->GetMaxPower(POWER_RUNIC_POWER))
+                    if (getpower() < me->GetMaxPower(POWER_RUNIC_POWER))
                         me->SetPower(POWER_RUNIC_POWER, runicpower + uint32(20 * runicpowerIncomeMult)); //+2 runic power every 5 sec
                     else
                         me->SetPower(POWER_RUNIC_POWER, me->GetMaxPower(POWER_RUNIC_POWER));
@@ -572,7 +576,7 @@ public:
             BreakCC(diff);
             if (CCed(me)) return;
 
-            if (GetHealthPCT(me) < 67 && Potion_cd <= diff)
+            if (Potion_cd <= diff && GetHealthPCT(me) < 67)
             {
                 temptimer = GC_Timer;
                 if (doCast(me, HEALINGPOTION))
@@ -587,58 +591,53 @@ public:
             CheckPresence(diff);
 
             //HORN OF WINTER
-            if (HORN_OF_WINTER && HornOfWinter_cd <= (me->IsInCombat() ? 45000 : diff) && Rand() < 30 &&
+            if (IsSpellReady(HORN_OF_WINTER_1, diff, false, (me->IsInCombat() ? 45000 : 0)) && Rand() < 30 &&
                 (me->IsInCombat() || (me->GetDistance(master) < 28 && master->IsWithinLOSInMap(me))))
             {
-                Aura* horn = master->GetAura(HORN_OF_WINTER);
+                Aura* horn = master->GetAura(GetSpell(HORN_OF_WINTER_1));
                 if (!horn || horn->GetDuration() < 5000)
                 {
                     temptimer = GC_Timer;
-                    if (doCast(me, HORN_OF_WINTER))
+                    if (doCast(me, GetSpell(HORN_OF_WINTER_1)))
                     {
-                        HornOfWinter_cd = 60000;
                         GC_Timer = temptimer;
                         return;
                     }
                 }
             }
             //BONE SHIELD
-            if (BONE_SHIELD && BoneShield_cd <= diff && GC_Timer <= diff && HaveRune(RUNE_UNHOLY) && Rand() < 25)
+            if (IsSpellReady(BONE_SHIELD_1, diff) && HaveRune(RUNE_UNHOLY) && Rand() < 25)
             {
-                Aura* bone = me->GetAura(BONE_SHIELD);
+                Aura* bone = me->GetAura(GetSpell(BONE_SHIELD_1));
                 if (!bone || bone->GetCharges() < 2 || (!me->IsInCombat() && bone->GetDuration() < 60000))
                 {
-                    if (doCast(me, BONE_SHIELD))
+                    if (doCast(me, GetSpell(BONE_SHIELD_1)))
                     {
-                        BoneShield_cd = 30000;
                         GC_Timer = 800;
                         return;
                     }
                 }
 
-                BoneShield_cd = 1000; //fail
+                SetSpellCooldown(BONE_SHIELD_1, 1000); //fail
             }
 
             if (me->IsInCombat())
             {
                 //ICEBOUND FORTITUDE
-                if (ICEBOUND_FORTITUDE && IceboundFortitude_cd <= diff && getpower() >= 200 &&
+                if (IsSpellReady(ICEBOUND_FORTITUDE_1, diff, false) && getpower() >= 200 &&
                     GetHealthPCT(me) < std::min<uint32>(85, 45 + uint8(me->getAttackers().size()) * 7) &&
-                    Rand() < 40 + (me == tank) * 50)
+                    Rand() < 40 + IsTank() * 50)
                 {
                     temptimer = GC_Timer;
-                    if (doCast(me, ICEBOUND_FORTITUDE))
-                    {
+                    if (doCast(me, GetSpell(ICEBOUND_FORTITUDE_1)))
                         GC_Timer = temptimer;
-                        IceboundFortitude_cd = 90000;
-                    }
                 }
 
                 CheckAntiMagicShell(diff);
                 CheckHysteria(diff);
             }
 
-            if (!CheckAttackTarget(CLASS_DEATH_KNIGHT))
+            if (!CheckAttackTarget(BOT_CLASS_DEATH_KNIGHT))
                 return;
 
             Attack(diff);
@@ -658,43 +657,39 @@ public:
             //SELFHEAL
 
             //RUNE TAP
-            if (RUNE_TAP && RuneTap_cd <= diff && GC_Timer <= 600 && GetHealthPCT(me) < 40 && Rand() < 50)
+            if (IsSpellReady(RUNE_TAP_1, diff) && GetHealthPCT(me) < 40 && Rand() < 50)
             {
-                if (!HaveRune(RUNE_BLOOD) && EMPOWER_RUNE_WEAPON && EmpowerRuneWeapon_cd <= diff)
+                if (!HaveRune(RUNE_BLOOD) && IsSpellReady(EMPOWER_RUNE_WEAPON_1, diff, false))
                 {
                     temptimer = GC_Timer;
-                    if (doCast(me, EMPOWER_RUNE_WEAPON))
+                    if (doCast(me, GetSpell(EMPOWER_RUNE_WEAPON_1)))
                     {
                         ActivateAllRunes();
-                        EmpowerRuneWeapon_cd = 60000;
                         GC_Timer = temptimer;
                     }
                 }
                 temptimer = GC_Timer;
-                if (doCast(me, RUNE_TAP))
+                if (doCast(me, GetSpell(RUNE_TAP_1)))
                 {
-                    RuneTap_cd = 20000;
                     GC_Timer = temptimer;
                     return;
                 }
             }
             //VAMPIRIC BLOOD
-            if (VAMPIRIC_BLOOD && VampiricBlood_cd <= diff && GetHealthPCT(me) < 26/* && Rand() < 75*/)
+            if (IsSpellReady(VAMPIRIC_BLOOD_1, diff, false) && GetHealthPCT(me) < 26/* && Rand() < 75*/)
             {
-                if (!HaveRune(RUNE_BLOOD) && EMPOWER_RUNE_WEAPON && EmpowerRuneWeapon_cd <= 40000)
+                if (!HaveRune(RUNE_BLOOD) && IsSpellReady(EMPOWER_RUNE_WEAPON_1, diff, false, 40000))
                 {
                     temptimer = GC_Timer;
-                    if (doCast(me, EMPOWER_RUNE_WEAPON))
+                    if (doCast(me, GetSpell(EMPOWER_RUNE_WEAPON_1)))
                     {
                         ActivateAllRunes();
-                        EmpowerRuneWeapon_cd = 60000;
                         GC_Timer = temptimer;
                     }
                 }
                 temptimer = GC_Timer;
-                if (doCast(me, VAMPIRIC_BLOOD))
+                if (doCast(me, GetSpell(VAMPIRIC_BLOOD_1)))
                 {
-                    VampiricBlood_cd = 40000;
                     GC_Timer = temptimer;
                     return;
                 }
@@ -703,14 +698,13 @@ public:
 
             //MARK OF BLOOD
             Unit* u = opponent->GetVictim();
-            if (MARK_OF_BLOOD && MarkOfBlood_cd <= diff && GC_Timer <= diff && HaveRune(RUNE_BLOOD) &&
+            if (IsSpellReady(MARK_OF_BLOOD_1, diff) && HaveRune(RUNE_BLOOD) &&
                 u && GetHealthPCT(u) < 85 && opponent->GetHealth() > u->GetMaxHealth() / 3 &&
-                (u == tank || u->GetTypeId() == TYPEID_PLAYER) &&
-                Rand() < 35 && !opponent->HasAura(MARK_OF_BLOOD) && IsInBotParty(u))
+                (IsTank(u) || u->GetTypeId() == TYPEID_PLAYER) &&
+                Rand() < 35 && !opponent->HasAura(MARK_OF_BLOOD_1) && IsInBotParty(u))
             {
-                if (doCast(opponent, MARK_OF_BLOOD))
+                if (doCast(opponent, GetSpell(MARK_OF_BLOOD_1)))
                 {
-                    MarkOfBlood_cd = 90000; //1.5 min for bots
                     GC_Timer = 800;
                     return;
                 }
@@ -728,28 +722,28 @@ public:
             //RANGED SECTION
 
             //STRANGULATE
-            if (STRANGULATE && Strangulate_cd <= diff && GC_Timer <= diff && meleedist <= 30 && HaveRune(RUNE_BLOOD) &&
+            if (IsSpellReady(STRANGULATE_1, diff) && meleedist <= 30 && HaveRune(RUNE_BLOOD) &&
                 opponent->IsNonMeleeSpellCast(false) && Rand() < 40)
             {
                 if (me->IsNonMeleeSpellCast(false))
                     me->InterruptNonMeleeSpells(false);
 
-                if (doCast(opponent, STRANGULATE))
+                if (doCast(opponent, GetSpell(STRANGULATE_1)))
                 {
-                    Strangulate_cd = 40000; //-67% for bots
+                    GC_Timer = 800;
                     return;
                 }
 
-                Strangulate_cd = 500; //fail
+                SetSpellCooldown(STRANGULATE_1, 500); //fail
             }
+
             //DARK COMMAND
-            if (DARK_COMMAND && DarkCommand_cd <= diff && dist < 30 && tank == me && opponent->GetVictim() != me &&
-                Rand() < 70)
+            if (IsSpellReady(DARK_COMMAND_1, diff, false) && dist < 30 && IsTank() &&
+                opponent->GetVictim() != me && Rand() < 70)
             {
                 temptimer = GC_Timer;
-                if (doCast(opponent, DARK_COMMAND))
+                if (doCast(opponent, GetSpell(DARK_COMMAND_1)))
                 {
-                    DarkCommand_cd = 6000;
                     GC_Timer = temptimer;
                     return;
                 }
@@ -771,17 +765,20 @@ public:
             //    DeathGrip_cd = 1000; //fail
             //}
             //CHAINS OF ICE
-            if (CHAINS_OF_ICE && GC_Timer <= diff && dist < 20 && HaveRune(RUNE_FROST) && opponent->isMoving() &&
-                !CCed(opponent) && opponent->GetVictim() != tank && IsInBotParty(opponent->GetVictim()) && Rand() < 25)
+            if (uint32 CHAINS_OF_ICE = GetSpell(CHAINS_OF_ICE_1))
             {
-                Aura* chains = opponent->GetAura(CHAINS_OF_ICE);
-                if (!chains || chains->GetDuration() < chains->GetMaxDuration() / 4)
+                if (GC_Timer <= diff && dist < 20 && HaveRune(RUNE_FROST) && opponent->isMoving() &&
+                    !CCed(opponent) && !IsTank(opponent->GetVictim()) && IsInBotParty(opponent->GetVictim()) && Rand() < 25)
                 {
-                    if (doCast(opponent, CHAINS_OF_ICE))
+                    Aura* chains = opponent->GetAura(CHAINS_OF_ICE);
+                    if (!chains || chains->GetDuration() < chains->GetMaxDuration() / 4)
                     {
-                        //Improved Chains of Ice: convert frost rune into death rune
-                        ConvertRune(RUNE_FROST, 1);
-                        return;
+                        if (doCast(opponent, CHAINS_OF_ICE))
+                        {
+                            //Improved Chains of Ice: convert frost rune into death rune
+                            ConvertRune(RUNE_FROST, 1);
+                            return;
+                        }
                     }
                 }
             }
@@ -789,131 +786,122 @@ public:
             //AOE SECTION
 
             //HOWLING BLAST
-            if (HOWLING_BLAST && HowlingBlast_cd <= diff && GC_Timer <= diff &&
-                tank == me && meleedist < 8 && me->getAttackers().size() > 2 &&
-                Rand() < 50 && HaveRune(RUNE_UNHOLY) && HaveRune(RUNE_FROST))
+            if (IsSpellReady(HOWLING_BLAST_1, diff) && IsTank() && meleedist < 8 && HasRole(BOT_ROLE_DPS) &&
+                me->getAttackers().size() > 2 && HaveRune(RUNE_UNHOLY) && HaveRune(RUNE_FROST) && Rand() < 50)
             {
-                if (doCast(me, HOWLING_BLAST))
+                if (doCast(me, GetSpell(HOWLING_BLAST_1)))
                 {
-                    HowlingBlast_cd = 7000;
                     GC_Timer = 800;
                     return;
                 }
 
-                HowlingBlast_cd = 500; //fail
+                SetSpellCooldown(HOWLING_BLAST_1, 500); //fail
             }
             //BLOOD BOIL
-            if (BLOOD_BOIL && GC_Timer <= diff && Rand() < (10 + 40 * (tank == me)) && HaveRune(RUNE_BLOOD))
+            if (IsSpellReady(BLOOD_BOIL_1, diff) && HasRole(BOT_ROLE_DPS) && HaveRune(RUNE_BLOOD) && Rand() < (10 + 40 * IsTank()))
             {
                 std::list<Unit*> targets;
                 GetNearbyTargetsList(targets, 9.5f);
                 if (targets.size() >= 5)
-                    if (doCast(me, BLOOD_BOIL))
+                    if (doCast(me, GetSpell(BLOOD_BOIL_1)))
                         return;
             }
             //DEATH AND DECAY
-            if (DEATH_AND_DECAY && DeathAndDecay_cd <= diff && GC_Timer <= diff && Rand() < (30 + 30 * (tank == me)) &&
+            if (IsSpellReady(DEATH_AND_DECAY_1, diff) && HasRole(BOT_ROLE_DPS) && Rand() < (30 + 30 * IsTank()) &&
                 HaveRune(RUNE_BLOOD) && HaveRune(RUNE_UNHOLY) && HaveRune(RUNE_FROST))
             {
                 if (Unit* target = FindAOETarget(30, true))
                 {
-                    if (doCast(target, DEATH_AND_DECAY))
-                    {
-                        DeathAndDecay_cd = 15000; //improved by Morbidity
+                    if (doCast(target, GetSpell(DEATH_AND_DECAY_1)))
                         return;
-                    }
                 }
 
-                DeathAndDecay_cd = 500; //fail
+                SetSpellCooldown(DEATH_AND_DECAY_1, 500); //fail
             }
 
             //END AOE SECTION
 
             //ICY TOUCH
-            if (ICY_TOUCH && GC_Timer <= diff && dist < 20 && HaveRune(RUNE_FROST) && Rand() < 25 &&
+            if (IsSpellReady(ICY_TOUCH_1, diff) && HasRole(BOT_ROLE_DPS) && dist < 20 && HaveRune(RUNE_FROST) && Rand() < 25 &&
                 !opponent->HasAura(FROST_FEVER_AURA, me->GetGUID()))
             {
-                if (doCast(opponent, ICY_TOUCH))
+                if (doCast(opponent, GetSpell(ICY_TOUCH_1)))
                     return;
             }
-            //DEATH COIL
-            if (DEATH_COIL && GC_Timer <= 600 && dist < 20 &&
-                int32(getpower()) >= (400 + 200 * (RUNE_STRIKE != 0 || MIND_FREEZE != 0 || ANTI_MAGIC_SHELL != 0) + 400 * (HUNGERING_COLD != 0)) &&
+            //DEATH COIL //custom cd condition
+            if (GetSpell(DEATH_COIL_1) && GC_Timer <= 600 && dist < 20 && HasRole(BOT_ROLE_DPS) &&
+                int32(getpower()) >= (400 + 200 * (GetSpell(RUNE_STRIKE_1) != 0 || GetSpell(MIND_FREEZE_1) != 0 || GetSpell(ANTI_MAGIC_SHELL_1) != 0) + 400 * (GetSpell(HUNGERING_COLD_1) != 0)) &&
                 Rand() < 60)
             {
-                if (doCast(opponent, DEATH_COIL))
+                if (doCast(opponent, GetSpell(DEATH_COIL_1)))
                     return;
             }
 
             //MELEE SECTION
 
             //MIND FREEZE
-            if (MIND_FREEZE && MindFreeze_cd <= diff && meleedist <= 5 && getpower() >= 200 &&
+            if (IsSpellReady(MIND_FREEZE_1, diff, false) && meleedist <= 5 && getpower() >= 200 &&
                 opponent->IsNonMeleeSpellCast(false) && Rand() < 60)
             {
                 if (me->IsNonMeleeSpellCast(false))
                     me->InterruptNonMeleeSpells(false);
 
                 temptimer = GC_Timer;
-                if (doCast(opponent, MIND_FREEZE))
+                if (doCast(opponent, GetSpell(MIND_FREEZE_1)))
                 {
-                    MindFreeze_cd = 8000;
                     GC_Timer = temptimer;
                     return;
                 }
             }
             //HUNGERING COLD
-            if (HUNGERING_COLD && HungeringCold_cd <= diff && GC_Timer <= diff && getpower() >= 400 && Rand() < 20)
+            if (IsSpellReady(HUNGERING_COLD_1, diff) && HasRole(BOT_ROLE_DPS) && getpower() >= 400 && Rand() < 20)
             {
                 std::list<Unit*> targets;
                 GetNearbyTargetsList(targets, 9.f, 0, true);
                 if (targets.size() >= 3)
                 {
-                    if (doCast(me, HUNGERING_COLD))
-                    {
-                        HungeringCold_cd = 45000;
+                    if (doCast(me, GetSpell(HUNGERING_COLD_1)))
                         return;
-                    }
                 }
 
-                HungeringCold_cd = 500; //fail
+                SetSpellCooldown(HUNGERING_COLD_1, 500); //fail
             }
 
             if (MoveBehind(*opponent))
                 wait = 5;
 
             //RUNE STRIKE
-            if (RUNE_STRIKE && RuneStrike_cd <= diff && runestriketimer > me->getAttackTimer(BASE_ATTACK) &&
-                meleedist <= 5 && getpower() >= 200/* && Rand() < 75*/)
+            if (IsSpellReady(RUNE_STRIKE_1, diff, false) && runestriketimer > me->getAttackTimer(BASE_ATTACK) &&
+                HasRole(BOT_ROLE_DPS) && meleedist <= 5 && getpower() >= 200/* && Rand() < 75*/)
             {
                 temptimer = GC_Timer;
-                if (doCast(opponent, RUNE_STRIKE))
+                if (doCast(opponent, GetSpell(RUNE_STRIKE_1)))
                 {
-                    RuneStrike_cd = me->getAttackTimer(BASE_ATTACK); //only one per swing
                     runestriketimer = 0; //do not remove aura, just disable ability
                     GC_Timer = temptimer;
                 }
             }
             //PLAGUE STRIKE
-            if (PLAGUE_STRIKE && GC_Timer <= diff && meleedist <= 5 && HaveRune(RUNE_UNHOLY) && Rand() < 35 &&
+            if (IsSpellReady(PLAGUE_STRIKE_1, diff) && HasRole(BOT_ROLE_DPS) && meleedist <= 5 && HaveRune(RUNE_UNHOLY) && Rand() < 35 &&
                 !opponent->HasAura(BLOOD_PLAGUE_AURA, me->GetGUID()))
             {
-                if (doCast(opponent, PLAGUE_STRIKE))
+                if (doCast(opponent, GetSpell(PLAGUE_STRIKE_1)))
                     return;
             }
 
             //DISEASE SECTION
             uint32 diseases = opponent->GetDiseasesByCaster(me->GetGUID());
 
-            //PESTILENCE
-            if (PESTILENCE && pestilencetimer == 0 && GC_Timer <= 600 && diseases > 1 && meleedist <= 5 &&
+            //PESTILENCE //custom cd condition
+            if (GetSpell(PESTILENCE_1) && pestilencetimer == 0 && HasRole(BOT_ROLE_DPS) && GC_Timer <= 600 &&
+                diseases > 1 && meleedist <= 5 &&
                 HaveRune(RUNE_BLOOD) && Rand() < 15)
             {
                 std::list<Unit*> targets;
                 GetNearbyTargetsList(targets, 9.f);
                 if (targets.size() > 2)
                 {
-                    if (doCast(opponent, PESTILENCE))
+                    if (doCast(opponent, GetSpell(PESTILENCE_1)))
                     {
                         pestilencetimer = 10000;
                         return;
@@ -923,28 +911,30 @@ public:
                 pestilencetimer = 1000; //fail
             }
             //DEATH STRIKE
-            if (DEATH_STRIKE && GC_Timer <= diff && diseases > 0 && meleedist <= 5 &&
+            if (IsSpellReady(DEATH_STRIKE_1, diff) && diseases > 0 && HasRole(BOT_ROLE_DPS) && meleedist <= 5 &&
                 HaveRune(RUNE_UNHOLY) && HaveRune(RUNE_FROST) &&
                 GetHealthPCT(me) < (91 - 10 * diseases) && Rand() < 70)
             {
-                if (doCast(opponent, DEATH_STRIKE))
+                if (doCast(opponent, GetSpell(DEATH_STRIKE_1)))
                     return;
             }
             //OBLITERATE
-            if (OBLITERATE && GC_Timer <= diff && diseases > 2 && meleedist <= 5 &&
+            if (IsSpellReady(OBLITERATE_1, diff) && diseases > 2 && HasRole(BOT_ROLE_DPS) && meleedist <= 5 &&
                 HaveRune(RUNE_UNHOLY) && HaveRune(RUNE_FROST) && Rand() < 20)
             {
-                if (doCast(opponent, OBLITERATE))
+                if (doCast(opponent, GetSpell(OBLITERATE_1)))
                     return;
             }
-            //BLOOD STRIKE
-            if (BLOOD_STRIKE && GC_Timer <= diff && diseases > 1 && meleedist <= 5 &&
+            //BLOOD STRIKE //custom
+            if (BLOOD_STRIKE && GC_Timer <= diff && HasRole(BOT_ROLE_DPS) && diseases > 1 && meleedist <= 5 &&
                 HaveRune(RUNE_BLOOD) && Rand() < 25)
             {
                 if (doCast(opponent, BLOOD_STRIKE))
                     return;
             }
         }
+
+        void ApplyClassDamageMultiplierMelee(uint32& /*damage*/, CalcDamageInfo& /*damageinfo*/) const {}
 
         void ApplyClassDamageMultiplierMelee(int32& damage, SpellNonMeleeDamage& damageinfo, SpellInfo const* spellInfo, WeaponAttackType /*attackType*/, bool& crit) const
         {
@@ -957,23 +947,23 @@ public:
                 float aftercrit = 0.f;
 
                 //Increased Plague Strike Crit (id 60130): 10% additional critical chance for Plague Strike
-                if (spellId == PLAGUE_STRIKE)
+                if (spellId == GetSpell(PLAGUE_STRIKE_1))
                     aftercrit += 0.1f;
                 //Glyph of Rune Strike: 10% additional critical chance for Rune Strike
-                if (spellId == RUNE_STRIKE)
+                if (spellId == GetSpell(RUNE_STRIKE_1))
                     aftercrit += 0.1f;
                 //Subversion: 9% additional critical chance for Blood Strike, Scourge Strike, Heart Strike and Obliterate
-                if (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE ||
-                    /*spellId == SCOURGE_STRIKE || */spellId == OBLITERATE)
+                if (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1) ||
+                    /*spellId == GetSpell(SCOURGE_STRIKE_1) || */spellId == GetSpell(OBLITERATE_1))
                     aftercrit += 0.09f;
                 //Improved Death Strike (part 2): 6% additional critical chance for Death Strike
-                if (spellId == DEATH_STRIKE)
+                if (spellId == GetSpell(DEATH_STRIKE_1))
                     aftercrit += 0.06f;
                 //Rime (part 1 melee): 15% additional critical chance for Obliterate
-                if (lvl >= 68 && spellId == OBLITERATE)
+                if (lvl >= 68 && spellId == GetSpell(OBLITERATE_1))
                     aftercrit += 15.f;
                 //Vicious Strikes (part 1): 6% additional critical chance for Plague Strike and Scourge Strike
-                if (lvl >= 57 && (spellId == PLAGUE_STRIKE/* || spellId == SCOURGE_STRIKE*/))
+                if (lvl >= 57 && (spellId == GetSpell(PLAGUE_STRIKE_1)/* || spellId == GetSpell(SCOURGE_STRIKE_1)*/))
                     aftercrit += 6.f;
 
                 //Annihilation: 3% additional critical chance for melee special abilities
@@ -993,58 +983,58 @@ public:
 
                 //Might of Mograine: 45% crit damage bonus for Blood Boil, Blood Strike, Death Strike and Heart Strike
                 if (lvl >= 68 &&
-                    (spellId == BLOOD_BOIL || spellId == BLOOD_STRIKE ||
-                    spellId == DEATH_STRIKE || spellId == HEART_STRIKE))
+                    (spellId == GetSpell(BLOOD_BOIL_1) || spellId == BLOOD_STRIKE ||
+                    spellId == GetSpell(DEATH_STRIKE_1) || spellId == GetSpell(HEART_STRIKE_1)))
                     pctbonus += 0.45f / 2.f;
                 //Guile of Gorefiend (part 1 melee): 45% crit damage bonus for Blood Strike, Frost Strike and Obliterate
                 if (lvl >= 69 &&
-                    (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE ||
-                    spellId == OBLITERATE/* || spellId == FROST_STRIKE*/))
+                    (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1) ||
+                    spellId == GetSpell(OBLITERATE_1)/* || spellId == GetSpell(FROST_STRIKE_1)*/))
                     pctbonus += 0.45f / 2.f;
                 //Vicious Strikes (part 2): 30% crit damage bonus for Plague Strike and Scourge Strike
-                if (lvl >= 57 && (spellId == PLAGUE_STRIKE/* || spellId == SCOURGE_STRIKE*/))
+                if (lvl >= 57 && (spellId == GetSpell(PLAGUE_STRIKE_1)/* || spellId == GetSpell(SCOURGE_STRIKE_1)*/))
                     pctbonus += 0.3f / 2.f;
             }
 
             //Glypg of Plague Strike: 20% bonus damage for Plague Strike
-            if (spellId == PLAGUE_STRIKE)
+            if (spellId == GetSpell(PLAGUE_STRIKE_1))
                 pctbonus += 0.2f;
             //Glyph of Blood Strike: 20% bonus damage for Blood Strike on snared targets (Heart Strike too for bots)
             //warning unsafe
-            if (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE)
+            if (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1))
                 if (damageinfo.target->HasAuraWithMechanic((1<<MECHANIC_SNARE)|(1<<MECHANIC_SLOW_ATTACK)))
                     pctbonus += 0.2f;
             //Increased Blood Strike Damage: 90 bonus damage for Blood Strike and Heart Strike
-            if (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE)
+            if (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1))
                 fdamage += 90.f;
             //Glyph of Death Strike: 1% bonus damage for every runic power point (max 25) for Death Strike
-            if (spellId == DEATH_STRIKE && me->GetPower(POWER_RUNIC_POWER) >= 10)
+            if (spellId == GetSpell(DEATH_STRIKE_1) && me->GetPower(POWER_RUNIC_POWER) >= 10)
             {
                 //10 to 250 * 0.001 = 10 to 250 / 1000 = 0.01 to 0.25
                 pctbonus += float(std::min<uint32>(me->GetPower(POWER_RUNIC_POWER), 250)) * 0.001f;
             }
             //Glyph of Obliterate: 25% bonus damage for Obliterate
-            if (spellId == OBLITERATE)
+            if (spellId == GetSpell(OBLITERATE_1))
                 pctbonus += 0.25f;
             //Bloody Strikes: 15% bonus damage for Blood Strike, 45% for Heart Strike and 30% for Blood Boil
             if (lvl >= 60)
             {
                 if (spellId == BLOOD_STRIKE)
                     pctbonus += 0.15f;
-                else if (spellId == HEART_STRIKE)
+                else if (spellId == GetSpell(HEART_STRIKE_1))
                     pctbonus += 0.45f;
-                else if (spellId == BLOOD_BOIL)
+                else if (spellId == GetSpell(BLOOD_BOIL_1))
                     pctbonus += 0.3f;
             }
             //Improved Death Strike (part 1): 30% bonus damage for Death Strike
-            if (spellId == DEATH_STRIKE)
+            if (spellId == GetSpell(DEATH_STRIKE_1))
                 pctbonus += 0.3f;
             //Merciless Combat (melee): 12% bonus damage for Obliterate on targets with less than 35% hp
             //warning unsafe
-            if (lvl >= 67 && spellId == OBLITERATE && damageinfo.target->GetHealthPct() < 35)
+            if (lvl >= 67 && spellId == GetSpell(OBLITERATE_1) && damageinfo.target->GetHealthPct() < 35)
                 pctbonus += 0.12f;
             //Blood of the North (part 1): 10% bonus damage for Blood Strike and Frost Strike (make Heart strike too)
-            if (lvl >= 69 && (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE/* || spellId == FROST_STRIKE*/))
+            if (lvl >= 69 && (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1)/* || spellId == GetSpell(FROST_STRIKE_1)*/))
                 pctbonus += 0.1f;
             //Tundra Stalker (melee): 40% damage bonus on targets affected with Frost Fever (20% for bot, regardless of caster)
             //warning unsafe
@@ -1053,9 +1043,9 @@ public:
             //Outbreak: 30% bonus damage for Plague Strike and 20% for Scourge Strike
             if (lvl >= 59)
             {
-                if (spellId == PLAGUE_STRIKE)
+                if (spellId == GetSpell(PLAGUE_STRIKE_1))
                     pctbonus += 0.3f;
-                //else if (spellId == SCOURGE_STRIKE)
+                //else if (spellId == GetSpell(SCOURGE_STRIKE_1))
                 //    pctbonus += 0.2f;
             }
 
@@ -1072,7 +1062,7 @@ public:
             {
                 float aftercrit = 0.f;
                 //Rime (part 1 spell): 15% additional critical chance for Icy Touch
-                if (lvl >= 68 && spellId == ICY_TOUCH)
+                if (lvl >= 68 && spellId == GetSpell(ICY_TOUCH_1))
                     aftercrit += 15.f;
 
                 if (aftercrit > 0.f)
@@ -1087,7 +1077,7 @@ public:
                 //so we should put here bonus damage mult /1.5
 
                 //Guile of Gorefiend (part 1 spell): 45% crit damage bonus for Howling Blast
-                if (lvl >= 69 && spellId == HOWLING_BLAST)
+                if (lvl >= 69 && spellId == GetSpell(HOWLING_BLAST_1))
                     pctbonus += 0.45f / 1.5f;
 
                 //Runic Focus: 50% crit damage bonus for all spells
@@ -1095,13 +1085,13 @@ public:
             }
 
             //Improved Icy Touch: 15% bonus damage for Icy Touch
-            if (spellId == ICY_TOUCH)
+            if (spellId == GetSpell(ICY_TOUCH_1))
                 pctbonus += 0.15f;
             //Increased Icy Touch Damage (id 54800): 111 bonus damage for Icy Touch
-            if (spellId == ICY_TOUCH)
+            if (spellId == GetSpell(ICY_TOUCH_1))
                 fdamage += 111.f;
             //Increased Death Coil Damage (id 54807): 80 bonus damage for Death Coil
-            if (spellId == DEATH_COIL)
+            if (spellId == GetSpell(DEATH_COIL_1))
                 fdamage += 80.f;
             //Black Ice: 10% bonus damage for all Shadow and Frost spells
             if (lvl >= 58 &&
@@ -1110,13 +1100,13 @@ public:
                 pctbonus += 0.1f;
             //Glacier Rot: 20% bonus damage for Icy Touch, Howling Blast and Frost Strike
             //warning unsafe
-            if (lvl >= 63 && (spellId == ICY_TOUCH || spellId == HOWLING_BLAST/* || spellId == FROST_STRIKE*/) &&
+            if (lvl >= 63 && (spellId == GetSpell(ICY_TOUCH_1) || spellId == GetSpell(HOWLING_BLAST_1)/* || spellId == GetSpell(FROST_STRIKE_1)*/) &&
                 damageinfo.target->GetDiseasesByCaster(me->GetGUID()) > 0)
                 pctbonus += 0.2f;
             //Merciless Combat (spell): 12% bonus damage for Icy Touch, Howling Blast and Frost Strike on targets with less than 35% hp
             //warning unsafe
             if (lvl >= 67 &&
-                (spellId == ICY_TOUCH || spellId == HOWLING_BLAST/* || spellId == FROST_STRIKE*/) &&
+                (spellId == GetSpell(ICY_TOUCH_1) || spellId == GetSpell(HOWLING_BLAST_1)/* || spellId == GetSpell(FROST_STRIKE_1)*/) &&
                 damageinfo.target->GetHealthPct() < 35)
                 pctbonus += 0.12f;
             //Tundra Stalker (spell): 40% damage bonus on targets affected with Frost Fever (20% for bot, regardless of caster)
@@ -1124,11 +1114,11 @@ public:
             if (lvl >= 70 && damageinfo.target->HasAura(FROST_FEVER_AURA))
                 pctbonus += 0.2f;
             //Morbidity: 15% damage bonus for Death Coil
-            if (lvl >= 58 && spellId == DEATH_COIL)
+            if (lvl >= 58 && spellId == GetSpell(DEATH_COIL_1))
                 pctbonus += 0.15f;
 
             //temp
-            if (spellId == RUNE_TAP)
+            if (spellId == GetSpell(RUNE_TAP_1))
                 pctbonus += 1.f;
 
             damage = int32(fdamage * (1.0f + pctbonus));
@@ -1164,7 +1154,7 @@ public:
             if (spellInfo->Effects[effect_index].Effect == SPELL_EFFECT_HEAL)
             {
                 //Improved Rune Tap: 100% bonus healing from Rune Tap
-                if (spellId == RUNE_TAP)
+                if (spellId == GetSpell(RUNE_TAP_1))
                     pct_mod += 1.f;
             }
 
@@ -1176,14 +1166,18 @@ public:
             uint32 spellId = spell->Id;
 
             //Glyph of Horn of Winter: 1 minute bonus duration (3 for bot)
-            if (spellId == HORN_OF_WINTER)
+            if (spellId == GetSpell(HORN_OF_WINTER_1))
             {
-                if (Aura* horn = target->GetAura(HORN_OF_WINTER, me->GetGUID()))
+                if (Aura* horn = target->GetAura(spellId, me->GetGUID()))
                 {
                     uint32 dur = horn->GetDuration() + 180000;
                     horn->SetDuration(dur);
                     horn->SetMaxDuration(dur);
                 }
+
+                //Winter Veil addition
+                if (sGameEventMgr->IsActiveEvent(GAME_EVENT_WINTER_VEIL))
+                    me->AddAura(44755, target); //snowflakes
             }
 
             if (target == me)
@@ -1201,27 +1195,27 @@ public:
                 }
             }
             //Sudden Doom: 15% ctc Death Coil on Blood Strike or Heart Strike (up to 30% for bot)
-            if (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE)
+            if (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1))
             {
-                if (DEATH_COIL && me->getLevel() >= 65 && irand(1,100) <= (me->getLevel() - 50))
+                if (GetSpell(DEATH_COIL_1) && me->getLevel() >= 65 && irand(1,100) <= (me->getLevel() - 50))
                 {
                     //debug: dk bot cannot cast without runic power even triggered spells
                     modpower(40);
-                    me->CastSpell(target, DEATH_COIL, true);
+                    me->CastSpell(target, GetSpell(DEATH_COIL_1), true);
                 }
             }
             //Rime (part 2): Obliterate has 15% chance to reset Howling Blast cooldown (25% for bot, screw runes part)
-            if (spellId == OBLITERATE)
+            if (spellId == GetSpell(OBLITERATE_1))
             {
                 if (me->getLevel() >= 67 && urand(1,100) <= 25)
-                    HowlingBlast_cd = 0;
+                    ResetSpellCooldown(HOWLING_BLAST_1);
             }
             //Chillblains Improved: increase duration by 10 sec (disable on players)
             if (spellId == ICY_CLUTCH)
             {
                 if (target->GetTypeId() != TYPEID_PLAYER)
                 {
-                    if (Aura* chill = target->GetAura(ICY_CLUTCH, me->GetGUID()))
+                    if (Aura* chill = target->GetAura(spellId, me->GetGUID()))
                     {
                         uint32 dur = chill->GetDuration() + 10000;
                         chill->SetDuration(dur);
@@ -1230,7 +1224,7 @@ public:
                 }
             }
             //Blood of the North (part 2): Blood Strike and Pestilence convert Blood Rune to Dark Rune (make Heart Strike too)
-            if (spellId == BLOOD_STRIKE || spellId == HEART_STRIKE || spellId == PESTILENCE)
+            if (spellId == BLOOD_STRIKE || spellId == GetSpell(HEART_STRIKE_1) || GetSpell(spellId == PESTILENCE_1))
             {
                 if (me->getLevel() >= 69)
                     ConvertRune(RUNE_BLOOD, 1);
@@ -1246,32 +1240,32 @@ public:
                 //Rune Strike activation and timer set
                 runestriketimer = 10000;
             }
-            if (spellId == ANTI_MAGIC_SHELL)
+            if (spellId == GetSpell(ANTI_MAGIC_SHELL_1))
             {
                 //Glyph of Anti-Magic Shell: 2 sec increased duration (5 for bot)
-                if (Aura* shell = me->GetAura(ANTI_MAGIC_SHELL))
+                if (Aura* shell = me->GetAura(spellId))
                 {
                     uint32 dur = shell->GetDuration() + 5000;
                     shell->SetDuration(dur);
                     shell->SetMaxDuration(dur);
                 }
             }
-            if (spellId == VAMPIRIC_BLOOD)
+            if (spellId == GetSpell(VAMPIRIC_BLOOD_1))
             {
                 //Glyph of Vampiric Blood: 5 sec increased duration
-                if (Aura* blood = me->GetAura(VAMPIRIC_BLOOD))
+                if (Aura* blood = me->GetAura(spellId))
                 {
                     uint32 dur = blood->GetDuration() + 5000;
                     blood->SetDuration(dur);
                     blood->SetMaxDuration(dur);
                 }
             }
-            if (spellId == BONE_SHIELD)
+            if (spellId == GetSpell(BONE_SHIELD_1))
             {
                 //Glyph of Bone Shield: 1 bonus charge (2 for bot, 7 for tank)
-                if (Aura* bone = me->GetAura(BONE_SHIELD))
+                if (Aura* bone = me->GetAura(spellId))
                 {
-                    bone->SetCharges(bone->GetCharges() + (master->GetBotTank(me->GetCreatureTemplate()->Entry) == me ? 3 : 1));
+                    bone->SetCharges(bone->GetCharges() + (IsTank() ? 3 : 1));
                 }
             }
             if (spellId == ICY_TALONS_AURA1 || spellId == ICY_TALONS_AURA2 ||
@@ -1285,16 +1279,16 @@ public:
                     talons->SetMaxDuration(dur);
                 }
             }
-            if (spellId == DEATH_STRIKE || spellId == OBLITERATE)
+            if (spellId == GetSpell(DEATH_STRIKE_1) || spellId == GetSpell(OBLITERATE_1))
             {
                 //Death Rune Mastery: convert Unholy and Frost Runes into Death Runes
                 ConvertRune(RUNE_UNHOLY, 1);
                 ConvertRune(RUNE_FROST, 1);
             }
-            if (spellId == ICEBOUND_FORTITUDE)
+            if (spellId == GetSpell(ICEBOUND_FORTITUDE_1))
             {
                 //Guile of Gorefiend (part 2): Icebound Fortitude 6 sec increased duration (18 for bot)
-                if (Aura* fort = me->GetAura(ICEBOUND_FORTITUDE))
+                if (Aura* fort = me->GetAura(spellId))
                 {
                     uint32 dur = fort->GetDuration() + 18000;
                     fort->SetDuration(dur);
@@ -1318,23 +1312,15 @@ public:
                     int32 bp0 = int32(damage / 25); //4%
                     me->CastCustomSpell(me, BLOOD_PRESENCE_HEAL_EFFECT, &bp0, NULL, NULL, true);
                 }
-
-                for (uint8 i = 0; i != MAX_BOT_CTC_SPELLS; ++i)
-                {
-                    if (_ctc[i].first && !_ctc[i].second)
-                    {
-                        if (urand(1,100) <= CalcCTC(_ctc[i].first))
-                            _ctc[i].second = 1000;
-
-                        if (_ctc[i].second > 0)
-                            me->CastSpell(victim, _ctc[i].first, true);
-                    }
-                }
             }
+
+            bot_ai::DamageDealt(victim, damage, damageType);
         }
 
         void DamageTaken(Unit* u, uint32& /*damage*/)
         {
+            if (!u->IsInCombat() && !me->IsInCombat())
+                return;
             OnOwnerDamagedBy(u);
         }
 
@@ -1345,33 +1331,11 @@ public:
 
         void Reset()
         {
-            DeathGrip_cd = 0;
-            MindFreeze_cd = 0;
-            Strangulate_cd = 0;
-            DeathAndDecay_cd = 0;
-            IceboundFortitude_cd = 0;
-            DarkCommand_cd = 0;
-            HornOfWinter_cd = 0;
-            RuneStrike_cd = 0;
-            AntiMagicShell_cd = 0;
-            ArmyOfTheDead_cd = 0;
-            RuneTap_cd = 5000;
-            BoneShield_cd = 5000;
-            EmpowerRuneWeapon_cd = 10000;
-            MarkOfBlood_cd = 10000;
-            VampiricBlood_cd = 10000;
-            Lichborne_cd = 10000;
-            HungeringCold_cd = 10000;
-            HowlingBlast_cd = 3000;
-            Hysteria_cd = 10000;
-
             presencetimer = 0;
             runicpowertimer = 2000;
             runicpowertimer2 = 5000;
             runestriketimer = 0;
             pestilencetimer = 0;
-
-            //rendTarget = 0;
 
             Presence = BOT_STANCE_NONE;
 
@@ -1380,39 +1344,13 @@ public:
             me->setPowerType(POWER_RUNIC_POWER);
             me->SetMaxPower(POWER_RUNIC_POWER, me->GetCreatePowers(POWER_RUNIC_POWER));
 
-            if (master)
-            {
-                setStats(CLASS_DEATH_KNIGHT, me->getRace(), master->getLevel(), true);
-                ApplyClassPassives();
-                ApplyPassives(CLASS_DEATH_KNIGHT);
-                InitPowers();
-                InitRunes();
-            }
+            DefaultInit();
+            InitRunes();
         }
 
         void ReduceCD(uint32 diff)
         {
-            CommonTimers(diff);
             RuneTimers(diff);
-            if (DeathGrip_cd > diff)                DeathGrip_cd -= diff;
-            if (MindFreeze_cd > diff)               MindFreeze_cd -= diff;
-            if (Strangulate_cd > diff)              Strangulate_cd -= diff;
-            if (DeathAndDecay_cd > diff)            DeathAndDecay_cd -= diff;
-            if (IceboundFortitude_cd > diff)        IceboundFortitude_cd -= diff;
-            if (DarkCommand_cd > diff)              DarkCommand_cd -= diff;
-            if (HornOfWinter_cd > diff)             HornOfWinter_cd -= diff;
-            if (RuneStrike_cd > diff)               RuneStrike_cd -= diff;
-            if (AntiMagicShell_cd > diff)           AntiMagicShell_cd -= diff;
-            if (ArmyOfTheDead_cd > diff)            ArmyOfTheDead_cd -= diff;
-            if (RuneTap_cd > diff)                  RuneTap_cd -= diff;
-            if (BoneShield_cd > diff)               BoneShield_cd -= diff;
-            if (EmpowerRuneWeapon_cd > diff)        EmpowerRuneWeapon_cd -= diff;
-            if (MarkOfBlood_cd > diff)              MarkOfBlood_cd -= diff;
-            if (VampiricBlood_cd > diff)            VampiricBlood_cd -= diff;
-            if (Lichborne_cd > diff)                Lichborne_cd -= diff;
-            if (HungeringCold_cd > diff)            HungeringCold_cd -= diff;
-            if (HowlingBlast_cd > diff)             HowlingBlast_cd -= diff;
-            if (Hysteria_cd > diff)                 Hysteria_cd -= diff;
 
             if (presencetimer > diff)               presencetimer -= diff;
             if (runicpowertimer > diff)             runicpowertimer -= diff;
@@ -1424,9 +1362,6 @@ public:
             else                                    pestilencetimer = 0;
         }
 
-        bool CanRespawn()
-        {return false;}
-
         void InitPowers()
         {
             if (master->getLevel() >= 70)
@@ -1434,7 +1369,10 @@ public:
             else if (master->getLevel() >= 58)
                 RefreshAura(RUNIC_POWER_MASTERY,4);
             else
+            {
+                RefreshAura(RUNIC_POWER_MASTERY,0);
                 me->SetMaxPower(POWER_RUNIC_POWER, me->GetCreatePowers(POWER_RUNIC_POWER));
+            }
 
             if (runicpower)
                 me->SetPower(POWER_RUNIC_POWER, runicpower);
@@ -1443,157 +1381,114 @@ public:
         void InitSpells()
         {
             uint8 lvl = me->getLevel();
-            //BLOOD_STRIKE                            = InitSpell(me, BLOOD_STRIKE_1);
-            ICY_TOUCH                               = InitSpell(me, ICY_TOUCH_1);
-            PLAGUE_STRIKE                           = InitSpell(me, PLAGUE_STRIKE_1);
-            DEATH_STRIKE                            = InitSpell(me, DEATH_STRIKE_1);
-            OBLITERATE                              = InitSpell(me, OBLITERATE_1);
-            RUNE_STRIKE                             = InitSpell(me, RUNE_STRIKE_1);
-  /*Talent*/HEART_STRIKE                            = InitSpell(me, HEART_STRIKE_1);
+            //InitSpellMap(BLOOD_STRIKE_1);
+            InitSpellMap(ICY_TOUCH_1);
+            InitSpellMap(PLAGUE_STRIKE_1);
+            InitSpellMap(DEATH_STRIKE_1);
+            InitSpellMap(OBLITERATE_1);
+            InitSpellMap(RUNE_STRIKE_1);
+  /*Talent*/InitSpellMap(HEART_STRIKE_1);
 
-            BLOOD_BOIL                              = InitSpell(me, BLOOD_BOIL_1);
-            DEATH_AND_DECAY                         = InitSpell(me, DEATH_AND_DECAY_1);
-  /*Talent*/HOWLING_BLAST               = lvl >= 63 ? InitSpell(me, HOWLING_BLAST_1) : 0;
+            InitSpellMap(BLOOD_BOIL_1);
+            InitSpellMap(DEATH_AND_DECAY_1);
+  /*Talent*/lvl >= 63 ? InitSpellMap(HOWLING_BLAST_1) : RemoveSpell(HOWLING_BLAST_1);
 
-            DEATH_COIL                              = InitSpell(me, DEATH_COIL_1);
-            DEATH_GRIP                              = DEATH_GRIP_1;
-            PESTILENCE                              = InitSpell(me, PESTILENCE_1);
-            MIND_FREEZE                             = InitSpell(me, MIND_FREEZE_1);
-            STRANGULATE                             = InitSpell(me, STRANGULATE_1);
-            CHAINS_OF_ICE                           = InitSpell(me, CHAINS_OF_ICE_1);
-            ICEBOUND_FORTITUDE                      = InitSpell(me, ICEBOUND_FORTITUDE_1);
-            DARK_COMMAND                            = InitSpell(me, DARK_COMMAND_1);
-            ANTI_MAGIC_SHELL                        = InitSpell(me, ANTI_MAGIC_SHELL_1);
-            ARMY_OF_THE_DEAD                        = InitSpell(me, ARMY_OF_THE_DEAD_1);
-  /*Talent*/LICHBORNE                               = LICHBORNE_1;
-  /*Talent*/HUNGERING_COLD              = lvl >= 60 ? HUNGERING_COLD_1 : 0;
+            InitSpellMap(DEATH_COIL_1);
+            InitSpellMap(DEATH_GRIP_1, true);
+            InitSpellMap(PESTILENCE_1);
+            InitSpellMap(MIND_FREEZE_1);
+            InitSpellMap(STRANGULATE_1);
+            InitSpellMap(CHAINS_OF_ICE_1);
+            InitSpellMap(ICEBOUND_FORTITUDE_1);
+            InitSpellMap(DARK_COMMAND_1);
+            InitSpellMap(ANTI_MAGIC_SHELL_1);
+            InitSpellMap(ARMY_OF_THE_DEAD_1);
+  /*Talent*/InitSpellMap(LICHBORNE_1, true);
+  /*Talent*/lvl >= 60 ? InitSpellMap(HUNGERING_COLD_1) : RemoveSpell(HUNGERING_COLD_1);
 
-            PATH_OF_FROST                           = InitSpell(me, PATH_OF_FROST_1);
-            HORN_OF_WINTER                          = InitSpell(me, HORN_OF_WINTER_1);
-  /*Talent*/RUNE_TAP                                = RUNE_TAP_1;
-  /*Talent*/BONE_SHIELD                 = lvl >= 58 ? BONE_SHIELD_1 : 0;
-            EMPOWER_RUNE_WEAPON                     = InitSpell(me, EMPOWER_RUNE_WEAPON_1);
-  /*Talent*/MARK_OF_BLOOD                           = MARK_OF_BLOOD_1;
-  /*Talent*/VAMPIRIC_BLOOD                          = VAMPIRIC_BLOOD_1;
-  /*Talent*/HYSTERIA                    = lvl >= 59 ? HYSTERIA_1 : 0;
+            InitSpellMap(PATH_OF_FROST_1);
+            InitSpellMap(HORN_OF_WINTER_1);
+  /*Talent*/InitSpellMap(RUNE_TAP_1, true);
+  /*Talent*/lvl >= 58 ? InitSpellMap(BONE_SHIELD_1) : RemoveSpell(BONE_SHIELD_1);
+            InitSpellMap(EMPOWER_RUNE_WEAPON_1);
+  /*Talent*/InitSpellMap(MARK_OF_BLOOD_1, true);
+  /*Talent*/InitSpellMap(VAMPIRIC_BLOOD_1, true);
+  /*Talent*/lvl >= 59 ? InitSpellMap(HYSTERIA_1) : RemoveSpell(HYSTERIA_1);
 
-            BLOOD_PRESENCE                          = BLOOD_PRESENCE_1;
-            FROST_PRESENCE                          = FROST_PRESENCE_1;
-            //UNHOLY_PRESENCE                         = UNHOLY_PRESENCE_1;
+            InitSpellMap(BLOOD_PRESENCE_1, true);
+            InitSpellMap(FROST_PRESENCE_1, true);
+            //InitSpellMap(UNHOLY_PRESENCE_1, true);
 
-            BLOOD_STRIKE                = lvl >= 65 ? HEART_STRIKE : InitSpell(me, BLOOD_STRIKE_1);
+  /*Custom*/BLOOD_STRIKE = lvl >= 65 ? GetSpell(HEART_STRIKE_1) : InitSpell(me, BLOOD_STRIKE_1);
+            InitSpellMap(BLOOD_STRIKE);
         }
 
         void ApplyClassPassives()
         {
             uint8 level = master->getLevel();
 
-            if (level >= 58)
-                RefreshAura(GLYPH_OF_CHAINS_OF_ICE);
-            if (level >= 80)
-                RefreshAura(CHAINS_OF_ICE_FROST_RUNE_REFRESH,4);
-            else if (level >= 77)
-                RefreshAura(CHAINS_OF_ICE_FROST_RUNE_REFRESH,3);
-            else if (level >= 68)
-                RefreshAura(CHAINS_OF_ICE_FROST_RUNE_REFRESH,2);
-            else if (level >= 58)
-                RefreshAura(CHAINS_OF_ICE_FROST_RUNE_REFRESH);
-            if (level >= 65)
-                RefreshAura(GLYPH_OF_HEART_STRIKE);
-            if (level >= 68)
-                RefreshAura(GLYPH_OF_RUNE_TAP,2);
-            else if (level >= 60)
-                RefreshAura(GLYPH_OF_RUNE_TAP);
-            if (level >= 63)
-                RefreshAura(GLYPH_OF_HOWLING_BLAST);
-            if (level >= 57)
-                RefreshAura(BUTCHERY);
-            if (level >= 58)
-                RefreshAura(SCENT_OF_BLOOD);
-            if (level >= 59)
-                RefreshAura(VENDETTA);
-            if (level >= 65)
-                RefreshAura(BLOODY_VENGEANCE3);
-            else if (level >= 60)
-                RefreshAura(BLOODY_VENGEANCE2);
-            else if (level >= 57)
-                RefreshAura(BLOODY_VENGEANCE1);
-            if (level >= 60)
-                RefreshAura(ABOMINATIONS_MIGHT);
-            if (level >= 67)
-                RefreshAura(IMPROVED_BLOOD_PRESENCE);
-            if (level >= 65)
-                RefreshAura(BLOODWORMS,2);
-            //if (level >= 66)
-            //    RefreshAura(IMPROVED_DEATH_STRIKE);
-            if (level >= 57)
-                RefreshAura(TOUGHNESS);
-            if (level >= 57)
-                RefreshAura(ANNIHILATION);
-            if (level >= 60)
-                RefreshAura(ICY_TALONS);
-            if (level >= 68)
-                RefreshAura(CHILL_OF_THE_GRAVE,2);
-            else if (level >= 58)
-                RefreshAura(CHILL_OF_THE_GRAVE);
-            if (level >= 64)
-                RefreshAura(IMPROVED_ICY_TALONS);
-            if (level >= 68)
-                RefreshAura(CHILBLAINS);
-            if (level >= 69)
-                RefreshAura(ACCLIMATION);
-            if (level >= 63)
-                RefreshAura(NECROSIS5);
-            else if (level >= 62)
-                RefreshAura(NECROSIS4);
-            else if (level >= 61)
-                RefreshAura(NECROSIS3);
-            else if (level >= 60)
-                RefreshAura(NECROSIS2);
-            else if (level >= 59)
-                RefreshAura(NECROSIS1);
-            if (level >= 65)
-                RefreshAura(BLOOD_CAKED_BLADE3);
-            else if (level >= 62)
-                RefreshAura(BLOOD_CAKED_BLADE2);
-            else if (level >= 60)
-                RefreshAura(BLOOD_CAKED_BLADE1);
-            if (level >= 67)
-                RefreshAura(DIRGE,2);
-            else if (level >= 61)
-                RefreshAura(DIRGE);
-            if (level >= 61)
-                RefreshAura(UNHOLY_BLIGHT);
-            if (level >= 62)
-                RefreshAura(DESECRATION);
-            if (level >= 64)
-                RefreshAura(CRYPT_FEVER);
-            if (level >= 68)
-                RefreshAura(EBON_PLAGUEBRINGER);
-            if (level >= 67)
-                RefreshAura(WANDERING_PLAGUE);
+            RefreshAura(GLYPH_OF_CHAINS_OF_ICE, level >= 58 ? 1 : 0);
+            RefreshAura(CHAINS_OF_ICE_FROST_RUNE_REFRESH, level >= 80 ? 4 : level >= 77 ? 3 : level >= 68 ? 2 : level >= 58 ? 1 : 0);
+            RefreshAura(GLYPH_OF_HEART_STRIKE, level >= 65 ? 1 : 0);
+            RefreshAura(GLYPH_OF_RUNE_TAP, level >= 68 ? 2 : level >= 60 ? 1 : 0);
+            RefreshAura(GLYPH_OF_HOWLING_BLAST, level >= 63 ? 1 : 0);
+            RefreshAura(BUTCHERY, level >= 57 ? 1 : 0);
+            RefreshAura(SCENT_OF_BLOOD, level >= 58 ? 1 : 0);
+            RefreshAura(VENDETTA, level >= 59 ? 1 : 0);
+            RefreshAura(BLOODY_VENGEANCE3, level >= 65 ? 1 : 0);
+            RefreshAura(BLOODY_VENGEANCE2, level >= 60 && level < 65 ? 1 : 0);
+            RefreshAura(BLOODY_VENGEANCE1, level >= 57 && level < 60 ? 1 : 0);
+            RefreshAura(ABOMINATIONS_MIGHT, level >= 60 ? 1 : 0);
+            RefreshAura(IMPROVED_BLOOD_PRESENCE, level >= 67 ? 1 : 0);
+            RefreshAura(BLOODWORMS, level >= 65 ? 2 : 0);
+            //RefreshAura(IMPROVED_DEATH_STRIKE, level >= 66 ? 1 : 0);
+            RefreshAura(TOUGHNESS, level >= 57 ? 1 : 0);
+            RefreshAura(ANNIHILATION, level >= 57 ? 1 : 0);
+            RefreshAura(ICY_TALONS, level >= 60 ? 1 : 0);
+            RefreshAura(CHILL_OF_THE_GRAVE, level >= 68 ? 2 : level >= 58 ? 1 : 0);
+            RefreshAura(IMPROVED_ICY_TALONS, level >= 64 ? 1 : 0);
+            RefreshAura(CHILBLAINS, level >= 68 ? 1 : 0);
+            RefreshAura(ACCLIMATION, level >= 69 ? 1 : 0);
+            RefreshAura(NECROSIS5, level >= 63 ? 1 : 0);
+            RefreshAura(NECROSIS4, level >= 62 && level < 63 ? 1 : 0);
+            RefreshAura(NECROSIS3, level >= 61 && level < 62 ? 1 : 0);
+            RefreshAura(NECROSIS2, level >= 60 && level < 61 ? 1 : 0);
+            RefreshAura(NECROSIS1, level >= 59 && level < 60 ? 1 : 0);
+            RefreshAura(BLOOD_CAKED_BLADE3, level >= 65 ? 1 : 0);
+            RefreshAura(BLOOD_CAKED_BLADE2, level >= 62 && level < 65 ? 1 : 0);
+            RefreshAura(BLOOD_CAKED_BLADE1, level >= 60 && level < 62 ? 1 : 0);
+            RefreshAura(DIRGE, level >= 67 ? 2 : level >= 61 ? 1 : 0);
+            RefreshAura(UNHOLY_BLIGHT, level >= 61 ? 1 : 0);
+            RefreshAura(DESECRATION, level >= 62 ? 1 : 0);
+            RefreshAura(CRYPT_FEVER, level >= 64 ? 1 : 0);
+            RefreshAura(EBON_PLAGUEBRINGER, level >= 68 ? 1 : 0);
+            RefreshAura(WANDERING_PLAGUE, level >= 67 ? 1 : 0);
 
             RefreshAura(FROST_FEVER);
             RefreshAura(BLOOD_PLAGUE);
         }
 
+        bool CanUseManually(uint32 basespell) const
+        {
+            switch (basespell)
+            {
+                case LICHBORNE_1:
+                case PATH_OF_FROST_1:
+                case HORN_OF_WINTER_1:
+                case BONE_SHIELD_1:
+                case RUNE_TAP_1:
+                case EMPOWER_RUNE_WEAPON_1:
+                case VAMPIRIC_BLOOD_1:
+                case HYSTERIA_1:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
     private:
-        uint32
-            BLOOD_STRIKE, ICY_TOUCH, PLAGUE_STRIKE, DEATH_STRIKE, OBLITERATE, RUNE_STRIKE, HEART_STRIKE,
-            BLOOD_BOIL, DEATH_AND_DECAY, HOWLING_BLAST,
-            DEATH_COIL, DEATH_GRIP, PESTILENCE, MIND_FREEZE, STRANGULATE, CHAINS_OF_ICE,
-            ICEBOUND_FORTITUDE, DARK_COMMAND, ANTI_MAGIC_SHELL, ARMY_OF_THE_DEAD, LICHBORNE, HUNGERING_COLD,
-            PATH_OF_FROST, HORN_OF_WINTER, BONE_SHIELD, RUNE_TAP, EMPOWER_RUNE_WEAPON, MARK_OF_BLOOD, VAMPIRIC_BLOOD, HYSTERIA,
-            BLOOD_PRESENCE, FROST_PRESENCE/*, UNHOLY_PRESENCE*/;
-
-        uint32
-            DeathGrip_cd, MindFreeze_cd, Strangulate_cd, DeathAndDecay_cd, IceboundFortitude_cd,
-            DarkCommand_cd, HornOfWinter_cd, RuneStrike_cd, AntiMagicShell_cd, ArmyOfTheDead_cd,
-            RuneTap_cd, BoneShield_cd, EmpowerRuneWeapon_cd, MarkOfBlood_cd, VampiricBlood_cd,
-            Lichborne_cd, HungeringCold_cd, HowlingBlast_cd, Hysteria_cd;
-
+        uint32 BLOOD_STRIKE;
 /*tmrs*/uint32 presencetimer, runicpowertimer, runicpowertimer2, runestriketimer, pestilencetimer;
-///*misc*/uint64 rendTarget;
 /*misc*/uint32 runicpower;
 /*misc*/float runicpowerIncomeMult, runicpowerLossMult;
 /*Chck*/uint8 Presence;
@@ -1666,8 +1561,8 @@ public:
             NECROSIS4                           = 51464,
             NECROSIS5                           = 51465,
             BLOOD_CAKED_BLADE1                  = 49219,
-            BLOOD_CAKED_BLADE2                  = 49227,
-            BLOOD_CAKED_BLADE3                  = 49228,
+            BLOOD_CAKED_BLADE2                  = 49627,
+            BLOOD_CAKED_BLADE3                  = 49628,
             DIRGE                               = 51206,//rank 2
             UNHOLY_BLIGHT                       = 49194,
             DESECRATION                         = 55667,//rank 2

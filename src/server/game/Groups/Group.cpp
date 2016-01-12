@@ -110,11 +110,13 @@ bool Group::Create(Player* leader)
     if (m_groupType & GROUPTYPE_RAID)
         _initRaidSubGroupsCounter();
 
+    //npcbot - set loot mode on create
     if (leader->HaveBot()) //player + npcbot so set to free-for-all on create
         m_lootMethod = FREE_FOR_ALL;
     else
-        if (!isLFGGroup())
-            m_lootMethod = GROUP_LOOT;
+    //end npcbot
+    if (!isLFGGroup())
+        m_lootMethod = GROUP_LOOT;
 
     m_lootThreshold = ITEM_QUALITY_UNCOMMON;
     m_looterGuid = leaderGuid;
@@ -656,10 +658,10 @@ bool Group::RemoveMember(uint64 guid, const RemoveMethod& method /*= GROUP_REMOV
         }
 
         if (m_memberMgr.getSize() < ((isLFGGroup() || isBGGroup()) ? 1u : 2u))
-            //npcbot
-            if (GetMembersCount() < ((isBGGroup() || isLFGGroup()) ? 1u : 2u))
-                //end npcbot
-                Disband();
+        //npcbot
+        if (GetMembersCount() < ((isLFGGroup() || isBGGroup()) ? 1u : 2u))
+        //end npcbot
+            Disband();
 
         return true;
     }
@@ -2555,4 +2557,72 @@ bool Group::IsGuildGroup(bool AllInSameMap, bool AllInSameInstanceId)
         }
     }
     return true;
+}
+
+bool Group::IsGuildGroup(uint32 guildId, bool AllInSameMap, bool AllInSameInstanceId)
+{
+	uint32 mapId = 0;
+	uint32 InstanceId = 0;
+	uint32 count = 0;
+	std::vector<Player*> members;
+	// First we populate the array
+	for (GroupReference *itr = GetFirstMember(); itr != NULL; itr = itr->next()) // Loop trought all members
+		if (Player *player = itr->GetSource())
+			if (player->GetGuildId() == guildId) // Check if it has a guild
+				members.push_back(player);
+
+	bool ret = false;
+	count = members.size();
+	for (std::vector<Player*>::iterator itr = members.begin(); itr != members.end(); ++itr) // Iterate through players
+	{
+		if (Player* player = (*itr))
+		{
+			if (mapId == 0)
+				mapId = player->GetMapId();
+
+			if (InstanceId == 0)
+				InstanceId = player->GetInstanceId();
+
+			if (player->GetMap()->IsNonRaidDungeon() && !ret)
+				if (count >= 3)
+					ret = true;
+
+			if (player->GetMap()->IsRaid() && !ret)
+			{
+				switch (player->GetMap()->GetDifficulty())
+				{
+				case RAID_DIFFICULTY_10MAN_NORMAL:
+				case RAID_DIFFICULTY_10MAN_HEROIC:
+					if (count >= 8)
+						ret = true;
+					break;
+
+                case RAID_DIFFICULTY_25MAN_NORMAL:
+				case RAID_DIFFICULTY_25MAN_HEROIC:
+					if (count >= 20)
+						ret = true;
+					break;
+				}
+			}
+
+			if (player->GetMap()->IsBattleArena() && !ret)
+				if (count == GetMembersCount())
+					ret = true;
+
+			if (player->GetMap()->IsBattleground() && !ret)
+				if (Battleground* bg = player->GetBattleground())
+					if (count >= uint32(bg->GetMaxPlayers() * 0.8f))
+						ret = true;
+
+			// ToDo: Check 40-player raids: 10/40
+
+			if (AllInSameMap && (mapId != player->GetMapId()))
+				return false;
+
+			if (AllInSameInstanceId && (InstanceId != player->GetInstanceId()))
+				return false;
+		}
+	}
+
+	return ret;
 }

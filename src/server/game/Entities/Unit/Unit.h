@@ -1068,7 +1068,7 @@ struct GlobalCooldown
     uint32 cast_time;
 };
 
-typedef UNORDERED_MAP<uint32 /*category*/, GlobalCooldown> GlobalCooldownList;
+typedef std::unordered_map<uint32 /*category*/, GlobalCooldown> GlobalCooldownList;
 
 class GlobalCooldownMgr                                     // Shared by Player and CharmInfo
 {
@@ -1276,7 +1276,7 @@ enum SpellCooldownFlags
     SPELL_COOLDOWN_FLAG_INCLUDE_EVENT_COOLDOWNS = 0x2   ///< Starts GCD for spells that should start their cooldown on events, requires SPELL_COOLDOWN_FLAG_INCLUDE_GCD set
 };
 
-typedef UNORDERED_MAP<uint32, uint32> PacketCooldowns;
+typedef std::unordered_map<uint32, uint32> PacketCooldowns;
 
 // delay time next attack to prevent client attack animation problems
 #define ATTACK_DISPLAY_DELAY 200
@@ -2060,9 +2060,6 @@ class Unit : public WorldObject
 
         void addFollower(FollowerReference* pRef) { m_FollowingRefManager.insertFirst(pRef); }
         void removeFollower(FollowerReference* /*pRef*/) { /* nothing to do yet */ }
-        static Unit* GetUnit(WorldObject& object, uint64 guid);
-        static Player* GetPlayer(WorldObject& object, uint64 guid);
-        static Creature* GetCreature(WorldObject& object, uint64 guid);
 
         MotionMaster* GetMotionMaster() { return i_motionMaster; }
         const MotionMaster* GetMotionMaster() const { return i_motionMaster; }
@@ -2230,6 +2227,18 @@ class Unit : public WorldObject
         void Yell(uint32 textId, WorldObject const* target = nullptr);
         void TextEmote(uint32 textId, WorldObject const* target = nullptr, bool isBossEmote = false);
         void Whisper(uint32 textId, Player* target, bool isBossWhisper = false);
+
+        //npcbot
+        bool HasReactive(ReactiveType reactive) const { return m_reactiveTimer[reactive] > 0; }
+        void ClearReactive(ReactiveType reactive);
+
+        void SuspendDelayedSwing();
+        void ExecuteDelayedSwingHit(bool extra = false);
+        CalcDamageInfo _damageInfo;
+        ObjectGuid _delayedTargetGuid;
+        uint32 _swingDelayTimer;
+        bool _swingLanded;
+        //end npcbot
 
     protected:
         explicit Unit (bool isWorldObject);
